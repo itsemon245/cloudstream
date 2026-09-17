@@ -802,6 +802,8 @@
     <string name="cloud_sync_not_configured">Not configured. Library and progress remain local.</string>
     <string name="cloud_sync_google_drive">Google Drive</string>
     <string name="cloud_sync_google_drive_summary">Use your private Google Drive app-data folder</string>
+    <string name="cloud_sync_google_play_services_unavailable">Google Drive sync requires Google Play services. Use WebDAV on this device.</string>
+    <string name="cloud_sync_google_oauth_configuration_required">Google Drive is not configured for this app build. Register its package and signing certificate in Google Cloud, or use WebDAV.</string>
     <string name="cloud_sync_webdav">WebDAV</string>
     <string name="cloud_sync_webdav_summary">Use Nextcloud, ownCloud, or another WebDAV server</string>
     <string name="cloud_sync_webdav_url">WebDAV folder or JSON file URL</string>
