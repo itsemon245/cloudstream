@@ -797,4 +797,31 @@
         <item quantity="other">%d downloads queued</item>
     </plurals>
     <string name="player_is_live">Live</string>
+    <string name="cloud_sync_category">Cloud sync (current profile)</string>
+    <string name="cloud_sync_status">Sync status</string>
+    <string name="cloud_sync_not_configured">Not configured. Library and progress remain local.</string>
+    <string name="cloud_sync_google_drive">Google Drive</string>
+    <string name="cloud_sync_google_drive_summary">Use your private Google Drive app-data folder</string>
+    <string name="cloud_sync_webdav">WebDAV</string>
+    <string name="cloud_sync_webdav_summary">Use Nextcloud, ownCloud, or another WebDAV server</string>
+    <string name="cloud_sync_webdav_url">WebDAV folder or JSON file URL</string>
+    <string name="cloud_sync_webdav_dialog_summary">Cloudstream will create cloudstream-sync-v1.json in this folder. The folder must already exist.</string>
+    <string name="cloud_sync_username">Username</string>
+    <string name="cloud_sync_password">Password or app password</string>
+    <string name="cloud_sync_save">Save</string>
+    <string name="cloud_sync_now">Sync now</string>
+    <string name="cloud_sync_now_summary">Merge this device’s local library and watch progress</string>
+    <string name="cloud_sync_disconnect">Disconnect cloud sync</string>
+    <string name="cloud_sync_disconnect_button">Disconnect</string>
+    <string name="cloud_sync_disconnect_confirmation">Stop syncing this profile? Local library and progress will stay on this device.</string>
+    <string name="cloud_sync_connected">Cloud sync connected</string>
+    <string name="cloud_sync_success">Cloud sync complete</string>
+    <string name="cloud_sync_waiting">Waiting for first sync</string>
+    <string name="cloud_sync_last_success">Last synced %1$s</string>
+    <string name="cloud_sync_last_error">Waiting to retry: %1$s</string>
+    <string name="cloud_sync_connect_failed">Could not connect cloud sync: %1$s</string>
+    <string name="cloud_sync_failed">Sync is unavailable and will retry: %1$s</string>
+    <string name="cloud_sync_authorization_required">Open account settings and reconnect Google Drive</string>
+    <string name="cloud_sync_authorization_failed">Google Drive authorization was not completed</string>
+    <string name="cloud_sync_invalid_url">Enter a valid http:// or https:// WebDAV URL</string>
 </resources>
