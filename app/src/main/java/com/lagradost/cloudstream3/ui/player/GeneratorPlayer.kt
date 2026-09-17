@@ -48,6 +48,7 @@ import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.lagradost.cloudstream3.APIHolder.getApiFromNameNull
 import com.lagradost.cloudstream3.CloudStreamApp
+import com.lagradost.cloudstream3.CloudStreamApp.Companion.getKey
 import com.lagradost.cloudstream3.CloudStreamApp.Companion.setKey
 import com.lagradost.cloudstream3.CommonActivity.showToast
 import com.lagradost.cloudstream3.LoadResponse
@@ -197,7 +198,31 @@ class GeneratorPlayer : FullScreenPlayer() {
                 } ?: episode
             }
 
+    private fun sourceSelectionStorageKey(meta: Any?): String? {
+        val episode = meta as? ResultEpisode ?: return null
+        return sourceSelectionStorageKey(
+            account = DataStoreHelper.currentAccount,
+            apiName = episode.apiName,
+            parentId = episode.parentId,
+        )
+    }
+
+    private fun rememberSourceSelection(link: ExtractorLink) {
+        val stored = viewModel.rememberSourceSelection(link) ?: return
+        val key = sourceSelectionStorageKey(currentMeta) ?: return
+        setKey(key, stored)
+    }
+
+    private fun restoreSourceSelection(generator: VideoGenerator<*>, index: Int) {
+        val key = sourceSelectionStorageKey(generator.videos.getOrNull(index)) ?: return
+        viewModel.restoreSourceSelection(getKey<StoredSourceSelection>(key))
+    }
+
     private fun setSubtitles(subtitle: SubtitleData?, userInitiated: Boolean): Boolean {
+        if (userInitiated) {
+            viewModel.rememberSubtitleSelection(subtitle)
+        }
+
         // If subtitle is changed and user initiated -> Save the language
         if (subtitle != currentSelectedSubtitles && userInitiated) {
             val subtitleLanguageTagIETF = if (subtitle == null) {
@@ -1393,6 +1418,9 @@ class GeneratorPlayer : FullScreenPlayer() {
                             } ?: false
                         }
                     }
+                    filteredLinks.getOrNull(sourceIndex)?.link?.first?.let {
+                        rememberSourceSelection(it)
+                    }
                     if (init) {
                         filteredLinks.getOrNull(sourceIndex)?.let {
                             loadLink(it.link, true)
@@ -1616,7 +1644,9 @@ class GeneratorPlayer : FullScreenPlayer() {
 
         val links = viewModel.state.sortLinks(currentQualityProfile)
 
-        val firstAvailableLink = links.firstOrNull { it.shouldUseLink }?.link
+        val firstAvailableLink = viewModel.findPreferredSource(links)?.link
+            ?: viewModel.findPreferredQualityFallback(links)?.link
+            ?: links.firstOrNull { it.shouldUseLink }?.link
         if (firstAvailableLink == null) {
             noLinksFound()
             return
@@ -1798,6 +1828,10 @@ class GeneratorPlayer : FullScreenPlayer() {
     private fun getAutoSelectSubtitle(
         subtitles: Set<SubtitleData>, settings: Boolean, downloads: Boolean
     ): SubtitleData? {
+        if (settings) {
+            viewModel.findPreferredSubtitle(sortSubs(subtitles))?.let { return it }
+        }
+
         val langCode = preferredAutoSelectSubtitles ?: return null
         if (downloads) {
             sortSubs(subtitles).firstOrNull {
@@ -1818,8 +1852,21 @@ class GeneratorPlayer : FullScreenPlayer() {
         val current = player.getCurrentPreferredSubtitle()
         Log.i(TAG, "autoSelectFromSettings = $current")
         context?.let { ctx ->
+            val preferred = viewModel.findPreferredSubtitle(sortSubs(viewModel.state.subtitles))
+            if (preferred != null) {
+                if (current == preferred) return true
+                if (setSubtitles(preferred, false)) {
+                    player.saveData()
+                    player.reloadPlayer(ctx)
+                    player.handleEvent(CSPlayerEvent.Play)
+                    return true
+                }
+            }
+
             // Only use the player preferred subtitle if it matches the available language
-            if (current != null && (langCode == null || current.matchesLanguageCode(langCode))) {
+            if (current != null && current in viewModel.state.subtitles &&
+                (langCode == null || current.matchesLanguageCode(langCode))
+            ) {
                 if (setSubtitles(current, false)) {
                     player.saveData()
                     player.reloadPlayer(ctx)
@@ -2252,6 +2299,7 @@ class GeneratorPlayer : FullScreenPlayer() {
             return
         }
         viewModel.attachGenerator(generator, index)
+        restoreSourceSelection(generator, index)
 
         context?.let { ctx ->
             val settingsManager = PreferenceManager.getDefaultSharedPreferences(ctx)
@@ -2379,10 +2427,14 @@ class GeneratorPlayer : FullScreenPlayer() {
             }
 
             safe {
-                if (!isPlayerActive.get() && viewModel.state.links.any { link ->
-                        getLinkPriority(currentQualityProfile, link.first) >=
-                                QualityDataHelper.AUTO_SKIP_PRIORITY
-                    }
+                val preferredSourceIsReady = viewModel.findPreferredSource(sortedLinks) != null
+                val canAutoStartByPriority = !viewModel.hasPreferredSourceSelection() &&
+                        viewModel.state.links.any { link ->
+                            getLinkPriority(currentQualityProfile, link.first) >=
+                                    QualityDataHelper.AUTO_SKIP_PRIORITY
+                        }
+                if (!isPlayerActive.get() &&
+                    (preferredSourceIsReady || canAutoStartByPriority)
                 ) {
                     startPlayer()
                 }
