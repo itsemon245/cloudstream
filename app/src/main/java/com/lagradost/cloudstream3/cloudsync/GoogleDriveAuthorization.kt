@@ -6,6 +6,10 @@ import android.content.Intent
 import com.google.android.gms.auth.api.identity.AuthorizationRequest
 import com.google.android.gms.auth.api.identity.Identity
 import com.google.android.gms.auth.api.identity.RevokeAccessRequest
+import com.google.android.gms.common.ConnectionResult
+import com.google.android.gms.common.GoogleApiAvailability
+import com.google.android.gms.common.api.ApiException
+import com.google.android.gms.common.api.CommonStatusCodes
 import com.google.android.gms.common.api.Scope
 import com.google.android.gms.tasks.Task
 import kotlinx.coroutines.suspendCancellableCoroutine
@@ -15,7 +19,19 @@ import kotlin.coroutines.resumeWithException
 sealed interface GoogleDriveAuthorizationOutcome {
     data object Authorized : GoogleDriveAuthorizationOutcome
     data class NeedsResolution(val pendingIntent: PendingIntent) : GoogleDriveAuthorizationOutcome
+    data object Cancelled : GoogleDriveAuthorizationOutcome
+    data object ConfigurationRequired : GoogleDriveAuthorizationOutcome
+    data object Unavailable : GoogleDriveAuthorizationOutcome
     data class Failed(val error: Throwable) : GoogleDriveAuthorizationOutcome
+}
+
+internal fun googleDriveAuthorizationFailure(
+    statusCode: Int?,
+    error: Throwable,
+): GoogleDriveAuthorizationOutcome = when (statusCode) {
+    CommonStatusCodes.API_NOT_CONNECTED -> GoogleDriveAuthorizationOutcome.Unavailable
+    CommonStatusCodes.DEVELOPER_ERROR -> GoogleDriveAuthorizationOutcome.ConfigurationRequired
+    else -> GoogleDriveAuthorizationOutcome.Failed(error)
 }
 
 object GoogleDriveAuthorization {
@@ -25,6 +41,11 @@ object GoogleDriveAuthorization {
         context: Context,
         callback: (GoogleDriveAuthorizationOutcome) -> Unit,
     ) {
+        if (!isGooglePlayServicesAvailable(context)) {
+            callback(GoogleDriveAuthorizationOutcome.Unavailable)
+            return
+        }
+
         Identity.getAuthorizationClient(context)
             .authorize(buildRequest())
             .addOnSuccessListener { result ->
@@ -43,17 +64,36 @@ object GoogleDriveAuthorization {
                     )
                 }
             }
-            .addOnFailureListener { callback(GoogleDriveAuthorizationOutcome.Failed(it)) }
+            .addOnFailureListener { error ->
+                callback(
+                    googleDriveAuthorizationFailure(
+                        statusCode = (error as? ApiException)?.statusCode,
+                        error = error,
+                    )
+                )
+            }
     }
 
-    fun finish(context: Context, data: Intent?): Boolean {
-        if (data == null) return false
-        return runCatching {
-            Identity.getAuthorizationClient(context)
+    fun finish(context: Context, data: Intent?): GoogleDriveAuthorizationOutcome {
+        if (data == null) return GoogleDriveAuthorizationOutcome.Cancelled
+
+        return try {
+            val accessToken = Identity.getAuthorizationClient(context)
                 .getAuthorizationResultFromIntent(data)
                 .accessToken
-                ?.isNotBlank() == true
-        }.getOrDefault(false)
+            if (accessToken?.isNotBlank() == true) {
+                GoogleDriveAuthorizationOutcome.Authorized
+            } else {
+                GoogleDriveAuthorizationOutcome.Failed(
+                    IllegalStateException("Google Drive returned no access token")
+                )
+            }
+        } catch (error: Throwable) {
+            googleDriveAuthorizationFailure(
+                statusCode = (error as? ApiException)?.statusCode,
+                error = error,
+            )
+        }
     }
 
     /** Best-effort revocation; local disconnect never waits for Google to be reachable. */
@@ -67,6 +107,9 @@ object GoogleDriveAuthorization {
     }
 
     internal suspend fun accessToken(context: Context): String {
+        if (!isGooglePlayServicesAvailable(context)) {
+            error("Google Play services are unavailable")
+        }
         val result = Identity.getAuthorizationClient(context)
             .authorize(buildRequest())
             .awaitValue()
@@ -82,6 +125,11 @@ object GoogleDriveAuthorization {
     }
 
     private fun requestedScopes(): List<Scope> = listOf(Scope(DRIVE_APP_DATA_SCOPE))
+
+    private fun isGooglePlayServicesAvailable(context: Context): Boolean {
+        return GoogleApiAvailability.getInstance().isGooglePlayServicesAvailable(context) ==
+                ConnectionResult.SUCCESS
+    }
 }
 
 private suspend fun <T> Task<T>.awaitValue(): T = suspendCancellableCoroutine { continuation ->
