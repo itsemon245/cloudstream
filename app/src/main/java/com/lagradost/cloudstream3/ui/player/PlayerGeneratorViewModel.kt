@@ -207,6 +207,15 @@ class PlayerGeneratorViewModel : ViewModel() {
         )
     }
 
+    fun findReadyPreferredSource(links: Iterable<DisplayLink>): DisplayLink? {
+        return preferredSourceSelection?.findReady(
+            candidates = links.filter(DisplayLink::shouldUseLink),
+            source = { it.link.first?.source },
+            name = { it.link.first?.name },
+            quality = { it.link.first?.quality },
+        )
+    }
+
     fun findPreferredQualityFallback(links: Iterable<DisplayLink>): DisplayLink? {
         return preferredSourceSelection?.findSameQuality(
             candidates = links.filter(DisplayLink::shouldUseLink),

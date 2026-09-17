@@ -2427,7 +2427,8 @@ class GeneratorPlayer : FullScreenPlayer() {
             }
 
             safe {
-                val preferredSourceIsReady = viewModel.findPreferredSource(sortedLinks) != null
+                val preferredSourceIsReady =
+                    viewModel.findReadyPreferredSource(sortedLinks) != null
                 val canAutoStartByPriority = !viewModel.hasPreferredSourceSelection() &&
                         viewModel.state.links.any { link ->
                             getLinkPriority(currentQualityProfile, link.first) >=
