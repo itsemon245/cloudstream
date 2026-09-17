@@ -122,10 +122,26 @@ object SettingsAccountScreen : SearchableSettings, BiometricAuthenticator.Biomet
         val googleAuthorizationLauncher = rememberLauncherForActivityResult(
             ActivityResultContracts.StartIntentSenderForResult()
         ) { result ->
-            if (GoogleDriveAuthorization.finish(context, result.data)) {
-                enableGoogleDrive()
-            } else {
-                showToast(R.string.cloud_sync_authorization_failed)
+            when (val outcome = GoogleDriveAuthorization.finish(context, result.data)) {
+                GoogleDriveAuthorizationOutcome.Authorized -> enableGoogleDrive()
+                GoogleDriveAuthorizationOutcome.Cancelled -> showToast(
+                    R.string.cloud_sync_authorization_failed
+                )
+                GoogleDriveAuthorizationOutcome.ConfigurationRequired -> showToast(
+                    R.string.cloud_sync_google_oauth_configuration_required
+                )
+                GoogleDriveAuthorizationOutcome.Unavailable -> showToast(
+                    R.string.cloud_sync_google_play_services_unavailable
+                )
+                is GoogleDriveAuthorizationOutcome.Failed -> showToast(
+                    context.getString(
+                        R.string.cloud_sync_connect_failed,
+                        outcome.error.message.orEmpty(),
+                    )
+                )
+                is GoogleDriveAuthorizationOutcome.NeedsResolution -> showToast(
+                    R.string.cloud_sync_authorization_failed
+                )
             }
         }
         val hasSecurity = remember(context) {
@@ -177,6 +193,12 @@ object SettingsAccountScreen : SearchableSettings, BiometricAuthenticator.Biomet
                             GoogleDriveAuthorization.request(context) { outcome ->
                                 when (outcome) {
                                     GoogleDriveAuthorizationOutcome.Authorized -> enableGoogleDrive()
+                                    GoogleDriveAuthorizationOutcome.Cancelled -> showToast(
+                                        R.string.cloud_sync_authorization_failed
+                                    )
+                                    GoogleDriveAuthorizationOutcome.ConfigurationRequired -> showToast(
+                                        R.string.cloud_sync_google_oauth_configuration_required
+                                    )
                                     is GoogleDriveAuthorizationOutcome.NeedsResolution -> {
                                         googleAuthorizationLauncher.launch(
                                             IntentSenderRequest.Builder(
@@ -184,6 +206,9 @@ object SettingsAccountScreen : SearchableSettings, BiometricAuthenticator.Biomet
                                             ).build()
                                         )
                                     }
+                                    GoogleDriveAuthorizationOutcome.Unavailable -> showToast(
+                                        R.string.cloud_sync_google_play_services_unavailable
+                                    )
                                     is GoogleDriveAuthorizationOutcome.Failed -> {
                                         showToast(
                                             context.getString(
