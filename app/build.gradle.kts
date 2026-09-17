@@ -265,6 +265,7 @@ dependencies {
     implementation(libs.tvprovider)
     implementation(libs.overlappingpanels) // Gestures
     implementation(libs.biometric) // Fingerprint Authentication
+    implementation(libs.play.services.auth) // Google Drive sync authorization
     implementation(libs.previewseekbar.media3) // SeekBar Preview
     implementation(libs.qrcode.kotlin) // QR Code for PIN Auth on TV
 
