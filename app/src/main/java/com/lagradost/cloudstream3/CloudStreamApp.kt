@@ -17,6 +17,7 @@ import com.lagradost.cloudstream3.BuildConfig
 import com.lagradost.cloudstream3.mvvm.safe
 import com.lagradost.cloudstream3.mvvm.safeAsync
 import com.lagradost.cloudstream3.plugins.PluginManager
+import com.lagradost.cloudstream3.services.CloudSyncWorkManager
 import com.lagradost.cloudstream3.ui.settings.Globals.EMULATOR
 import com.lagradost.cloudstream3.ui.settings.Globals.TV
 import com.lagradost.cloudstream3.ui.settings.Globals.isLayout
@@ -84,6 +85,7 @@ class CloudStreamApp : Application(), SingletonImageLoader.Factory {
         }
 
         AppDebug.isDebug = BuildConfig.DEBUG
+        CloudSyncWorkManager.ensureScheduled(this)
     }
 
     override fun attachBaseContext(base: Context?) {
