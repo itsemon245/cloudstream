@@ -180,6 +180,65 @@ class PlayerGeneratorViewModel : ViewModel() {
     @Volatile
     var episodeIndex: Int = 0
 
+    private var preferredSourceSelection: SourceSelectionPreference? = null
+    private var preferredSubtitleSelection: SubtitleSelectionPreference? = null
+
+    internal fun rememberSourceSelection(link: ExtractorLink): StoredSourceSelection? {
+        preferredSourceSelection = SourceSelectionPreference.create(
+            source = link.source,
+            name = link.name,
+            quality = link.quality,
+        )
+        return preferredSourceSelection?.toStored()
+    }
+
+    internal fun restoreSourceSelection(stored: StoredSourceSelection?) {
+        preferredSourceSelection = SourceSelectionPreference.restore(stored)
+    }
+
+    fun hasPreferredSourceSelection(): Boolean = preferredSourceSelection != null
+
+    fun findPreferredSource(links: Iterable<DisplayLink>): DisplayLink? {
+        return preferredSourceSelection?.findBest(
+            candidates = links.filter(DisplayLink::shouldUseLink),
+            source = { it.link.first?.source },
+            name = { it.link.first?.name },
+            quality = { it.link.first?.quality },
+        )
+    }
+
+    fun findPreferredQualityFallback(links: Iterable<DisplayLink>): DisplayLink? {
+        return preferredSourceSelection?.findSameQuality(
+            candidates = links.filter(DisplayLink::shouldUseLink),
+            quality = { it.link.first?.quality },
+        )
+    }
+
+    fun rememberSubtitleSelection(subtitle: SubtitleData?) {
+        preferredSubtitleSelection = subtitle
+            ?.takeUnless { it.origin == SubtitleOrigin.DOWNLOADED_FILE }
+            ?.let {
+                SubtitleSelectionPreference.create(
+                    originalName = it.originalName,
+                    nameSuffix = it.nameSuffix,
+                    origin = it.origin.name,
+                    languageTag = it.getIETF_tag(),
+                    source = subtitleSelectionSource(it.url),
+                )
+            }
+    }
+
+    fun findPreferredSubtitle(subtitles: Iterable<SubtitleData>): SubtitleData? {
+        return preferredSubtitleSelection?.findBest(
+            candidates = subtitles,
+            originalName = SubtitleData::originalName,
+            nameSuffix = SubtitleData::nameSuffix,
+            origin = { it.origin.name },
+            languageTag = SubtitleData::getIETF_tag,
+            source = { subtitleSelectionSource(it.url) },
+        )
+    }
+
     /**
      * The state of the video player, only modify it by modifyState to make sure observe is called,
      * and avoid concurrency issues.
