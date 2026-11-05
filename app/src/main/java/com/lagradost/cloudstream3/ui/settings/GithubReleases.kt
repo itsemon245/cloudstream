@@ -1,5 +1,6 @@
 package com.lagradost.cloudstream3.ui.settings
 
+import com.lagradost.cloudstream3.BuildConfig
 import com.fasterxml.jackson.annotation.JsonProperty
 import com.lagradost.cloudstream3.app
 import com.lagradost.cloudstream4.viewmodels.GithubFile
@@ -42,9 +43,16 @@ object GithubReleases : GithubRepository {
         @JsonProperty("object") @SerialName("object") val githubObject: GithubObject,
     )
 
-    const val APK_USERNAME = "recloudstream"
+    const val APK_USERNAME = "itsemon245"
     const val APK_REPOSITORY = "cloudstream"
-    const val APK_PRERELEASE = "pre-release"
+    const val APK_PRERELEASE = "apk-latest"
+
+    // Each fork release has a plain and a minified APK. Stay on the one that's installed.
+    private val APK_FILE_NAME = if (BuildConfig.MINIFIED) {
+        "cloudstream-fork-prerelease-minified.apk"
+    } else {
+        "cloudstream-fork-prerelease.apk"
+    }
     const val APK_CONTENT_TYPE = "application/vnd.android.package-archive"
 
     private val defaultHeaders = mapOf("Accept" to "application/vnd.github.v3+json")
@@ -87,7 +95,7 @@ object GithubReleases : GithubRepository {
 
         // Find the first correct asset, given that we might have other binaries we release in the same version
         val foundAsset = latestRelease.assets.firstOrNull { asset ->
-            asset.contentType == contentType
+            asset.contentType == contentType && (!prerelease || asset.name == APK_FILE_NAME)
         }
 
         if (foundAsset == null) {
@@ -100,7 +108,8 @@ object GithubReleases : GithubRepository {
             displayName = foundAsset.name.substringBeforeLast("."),
             changeLog = latestRelease.body,
             tagName = latestRelease.tagName,
-            nodeId = latestRelease.nodeId
+            // The fork's rolling release keeps its node id, so skip by the APK's digest instead.
+            nodeId = foundAsset.digest ?: latestRelease.nodeId
         )
     }
 }
