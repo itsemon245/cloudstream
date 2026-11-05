@@ -115,6 +115,11 @@ android {
         val localProperties = gradleLocalProperties(rootDir, project.providers)
 
         buildConfigField(
+            "boolean",
+            "MINIFIED",
+            providers.gradleProperty("minifyRelease").isPresent.toString()
+        )
+        buildConfigField(
             "long",
             "BUILD_DATE",
             "${System.currentTimeMillis()}"
