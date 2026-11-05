@@ -324,6 +324,16 @@
     <string name="poster_ui_settings">Toggle UI elements on poster</string>
     <string name="no_update_found">No Update Found</string>
     <string name="check_for_update">Check for Update</string>
+    <string name="ci_status">CI status</string>
+    <string name="ci_status_des">Recent upstream syncs and APK builds</string>
+    <string name="ci_status_error">Couldn\'t load CI status from GitHub.</string>
+    <string name="ci_sync">Upstream sync</string>
+    <string name="ci_builds">APK builds</string>
+    <string name="ci_no_runs">No runs yet</string>
+    <string name="ci_passed">Passed</string>
+    <string name="ci_failed">Failed</string>
+    <string name="ci_running">Running</string>
+    <string name="ci_cancelled">Cancelled</string>
     <string name="video_lock">Lock</string>
     <string name="video_aspect_ratio_resize">Resize</string>
     <string name="video_source">Source</string>
