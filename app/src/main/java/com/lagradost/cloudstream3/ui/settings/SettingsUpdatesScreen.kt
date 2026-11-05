@@ -78,6 +78,11 @@ object SettingsUpdatesScreen : SearchableSettings {
             }
         }
 
+        var showCiStatus by remember { mutableStateOf(false) }
+        if (showCiStatus) {
+            ForkCiStatusDialog { showCiStatus = false }
+        }
+
         val githubViewModel = MainActivityScreen.githubViewModel()
 
         return persistentListOf(
@@ -101,6 +106,12 @@ object SettingsUpdatesScreen : SearchableSettings {
                                 }
                             }*/
                         }
+                    ),
+                    Preference.PreferenceItem.TextPreference(
+                        title = stringResource(R.string.ci_status),
+                        subtitle = stringResource(R.string.ci_status_des),
+                        icon = painterResource(R.drawable.build_24px),
+                        onClick = { showCiStatus = true }
                     ),
                     Preference.PreferenceItem.TextPreference(
                         title = stringResource(R.string.install_prerelease),
