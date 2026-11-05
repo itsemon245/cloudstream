@@ -1,0 +1,128 @@
+# Publishes an APK to the rolling "apk-latest" pre-release when master has changed enough.
+# See .github/scripts/should-build-apk.sh for the rule. Add [build] to a commit message,
+# or run this workflow with "force", to build regardless.
+#
+# Builds the signed prerelease release variant, plain and minified (-PminifyRelease), from the
+# same commit. .github/scripts/create-release-key.sh makes
+# the key and sets the RELEASE_KEYSTORE_BASE64 and RELEASE_KEYSTORE_PASSWORD secrets.
+name: Build APK
+
+on:
+  push:
+    branches: [master]
+  workflow_dispatch:
+    inputs:
+      force:
+        description: Build even if the changes are minor
+        type: boolean
+        default: false
+
+# A newer push replaces a running build. The apk-latest tag only moves after a successful
+# build, so the replacement still counts every commit since the last APK.
+concurrency:
+  group: build-apk
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  decide:
+    runs-on: ubuntu-latest
+    outputs:
+      build: ${{ steps.gate.outputs.build }}
+      reason: ${{ steps.gate.outputs.reason }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: Decide whether to build
+        id: gate
+        env:
+          FORCE: ${{ inputs.force }}
+        run: |
+          if [ "$FORCE" = true ]; then
+            echo "build=true" >> "$GITHUB_OUTPUT"
+            echo "reason=Started manually." >> "$GITHUB_OUTPUT"
+          else
+            last=""
+            if git rev-parse --quiet --verify refs/tags/apk-latest >/dev/null; then last=refs/tags/apk-latest; fi
+            bash .github/scripts/should-build-apk.sh "$last"
+          fi
+          tail -n 1 "$GITHUB_OUTPUT" >> "$GITHUB_STEP_SUMMARY"
+
+  build:
+    needs: decide
+    if: needs.decide.outputs.build == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v5
+
+      # app/build.gradle.kts reads the keystore from ~/work/_temp/keystore, which is $RUNNER_TEMP.
+      - name: Restore the signing key
+        env:
+          RELEASE_KEYSTORE_BASE64: ${{ secrets.RELEASE_KEYSTORE_BASE64 }}
+        run: |
+          if [ -z "$RELEASE_KEYSTORE_BASE64" ]; then
+            echo "::error::RELEASE_KEYSTORE_BASE64 is not set. Run .github/scripts/create-release-key.sh."
+            exit 1
+          fi
+          mkdir -p "$RUNNER_TEMP/keystore"
+          base64 -d <<<"$RELEASE_KEYSTORE_BASE64" > "$RUNNER_TEMP/keystore/release.jks"
+
+      - name: Build
+        env:
+          SIGNING_KEY_ALIAS: cloudstream
+          SIGNING_KEY_PASSWORD: ${{ secrets.RELEASE_KEYSTORE_PASSWORD }}
+          SIGNING_STORE_PASSWORD: ${{ secrets.RELEASE_KEYSTORE_PASSWORD }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/apks"
+          ./gradlew :app:assemblePrereleaseRelease
+          cp app/build/outputs/apk/prerelease/release/*.apk "$RUNNER_TEMP/apks/cloudstream-fork-prerelease.apk"
+          ./gradlew :app:assemblePrereleaseRelease -PminifyRelease
+          cp app/build/outputs/apk/prerelease/release/*.apk "$RUNNER_TEMP/apks/cloudstream-fork-prerelease-minified.apk"
+
+      # The in-app updater compares this hash with the apk-latest tag. If they didn't match,
+      # the app would offer the same update forever.
+      - name: Check the APKs
+        run: |
+          apksigner="$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -n 1)/apksigner"
+          for apk in "$RUNNER_TEMP"/apks/*.apk; do
+            "$apksigner" verify --print-certs "$apk"
+            test "$(unzip -p "$apk" assets/git-hash.txt | cut -c1-7)" = "${GITHUB_SHA:0:7}"
+          done
+
+      - name: Publish to the apk-latest pre-release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REASON: ${{ needs.decide.outputs.reason }}
+        run: |
+          notes="Built from $GITHUB_SHA on $(date -u '+%F %H:%M UTC'). Reason: $REASON
+
+          Both APKs are the same app with the same key, so either one installs over the other."
+          # The tag moves last: it's what tells installed apps an update exists, so the
+          # APKs have to be in place first.
+          if gh release view apk-latest >/dev/null 2>&1; then
+            gh release edit apk-latest --prerelease --notes "$notes"
+            gh release upload apk-latest "$RUNNER_TEMP"/apks/*.apk --clobber
+            git tag -f apk-latest
+            git push -f origin refs/tags/apk-latest
+          else
+            git tag -f apk-latest
+            git push -f origin refs/tags/apk-latest
+            gh release create apk-latest "$RUNNER_TEMP"/apks/*.apk --prerelease --title "Latest fork APK" --notes "$notes"
+          fi
