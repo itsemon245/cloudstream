@@ -26,6 +26,9 @@ concurrency:
 permissions:
   contents: read
 
+env:
+  GH_REPO: ${{ github.repository }}
+
 jobs:
   decide:
     runs-on: ubuntu-latest
@@ -90,10 +93,13 @@ jobs:
           SIGNING_KEY_PASSWORD: ${{ secrets.RELEASE_KEYSTORE_PASSWORD }}
           SIGNING_STORE_PASSWORD: ${{ secrets.RELEASE_KEYSTORE_PASSWORD }}
         run: |
+          # Both APKs share a version code. Android refuses a lower one, so otherwise only
+          # the APK built last could be installed over the other.
+          version_code=$(( $(date +%s) / 60 ))
           mkdir -p "$RUNNER_TEMP/apks"
-          ./gradlew :app:assemblePrereleaseRelease
+          ./gradlew :app:assemblePrereleaseRelease -PbuildVersionCode=$version_code
           cp app/build/outputs/apk/prerelease/release/*.apk "$RUNNER_TEMP/apks/cloudstream-fork-prerelease.apk"
-          ./gradlew :app:assemblePrereleaseRelease -PminifyRelease
+          ./gradlew :app:assemblePrereleaseRelease -PminifyRelease -PbuildVersionCode=$version_code
           cp app/build/outputs/apk/prerelease/release/*.apk "$RUNNER_TEMP/apks/cloudstream-fork-prerelease-minified.apk"
 
       # The in-app updater compares this hash with the apk-latest tag. If they didn't match,
