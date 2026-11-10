@@ -26,7 +26,9 @@ permissions:
   contents: read
 
 env:
-  CHECKS: library:checkKotlinAbi :app:assemblePrereleaseDebug :app:testPrereleaseDebugUnitTest
+  # gh prefers a remote named "upstream", which the sync adds, so pin it to this repository.
+  GH_REPO: ${{ github.repository }}
+  CHECKS: :app:assemblePrereleaseDebug :app:testPrereleaseDebugUnitTest
   ISSUE_TITLE: Upstream sync needs attention
 
 jobs:
@@ -73,7 +75,13 @@ jobs:
         id: checks
         if: steps.rebase.outputs.status == 'rebased'
         continue-on-error: true
-        run: ./gradlew --continue $CHECKS
+        # Upstream's own master often fails the ABI check (it only runs on their pull requests),
+        # and additions can't break extensions. So only check the ABI when our commits change
+        # the library, where a change would be ours to look at.
+        run: |
+          abi=""
+          if ! git diff --quiet upstream/master HEAD -- library; then abi=library:checkKotlinAbi; fi
+          ./gradlew --continue $abi $CHECKS
 
       - name: Publish
         id: publish
