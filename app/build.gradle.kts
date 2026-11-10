@@ -181,7 +181,8 @@ android {
                 logger.warn("No prerelease signing config!")
             }
             versionNameSuffix = "-PRE"
-            versionCode = (System.currentTimeMillis() / 60000).toInt()
+            versionCode = providers.gradleProperty("buildVersionCode").orNull?.toInt()
+                ?: (System.currentTimeMillis() / 60000).toInt()
         }
     }
 
