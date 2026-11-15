@@ -69,8 +69,12 @@ caller supplies `source`/`name`/`quality` accessors, so the tests need no Androi
 
 Resolution is what the user sees in the label:
 
-- `NNNp`/`NNNi` tokens (144–4320) and `2K`/`4K`/`8K` in the name, as whole tokens (`x264`,
-  `DDP5.1`, `[2.41GB]` and `S01E03` are not resolutions);
+- in the name:
+  - `NNNp`/`NNNi` (144–4320), also with a frame rate or bit depth after it, or letters before it:
+    `1080p60` and `HD1080p` are 1080, `2160p10` is 2160;
+  - `2K`/`4K`/`8K`, also followed by letters (`4KHDR` is 2160);
+  - the words `UHD` (2160) and `FHD` (1080). Plain `HD` and `HDR` are not resolutions;
+  - `x264`, `DDP5.1`, `[2.41GB]` and `S01E03` are not resolutions;
 - plus the `quality` field when it is a real resolution. `Unknown` (400) and `Auto` (0) are not.
 
 **Rule: two sources have the same resolution only if these sets are equal.** The empty set means
@@ -129,16 +133,27 @@ rejected because `DahmerMovies BluRay REMUX …` has no brackets.
 - **Storage**: `"$account/player_source_history/$apiName|$parentId"` holds a
   `StoredSourceSelectionHistory(entries: List<StoredSourceSelection>)`.
 - **Migration and downgrade**: the old single key is still written with the newest pick, so older
-  builds keep working. If there is no history yet, the old key is read as a one-entry history.
+  builds keep working. `SourceSelectionHistory.restore(history, legacy)` combines the two keys:
+  - no history yet: the old key becomes a one-entry history;
+  - old key equal to the newest history entry (the normal case): the history is used as is;
+  - old key different: an older build (after a downgrade) made that pick later, so it goes on top
+    of the history.
 
 `findPreferred(candidates)`, where candidates are the usable links in priority order:
 
 1. For each remembered pick, newest first: its exact match, else a mirror of its family. A mirror
    of the newest pick therefore beats an exact match of an older pick, as the brief asks.
-2. The previous behaviour for the newest pick (`findBest`, then `findSameQuality`), now limited to
-   candidates with the same resolution. This keeps existing cases working, such as a provider
-   whose shared `source` field identifies the release. It also enforces the hard rule here.
-3. `null` means the player uses the first usable link (the unchanged default).
+2. The previous `findBest` for the newest pick, now limited to candidates with the same
+   resolution. It matches on the `source` field, which keeps working for providers whose shared
+   `source` field identifies the release.
+3. `null` means CloudStream's default pick: the first usable link in priority order.
+
+The previous "first link of the same quality from any provider" step (`findSameQuality`) is
+**removed**. It was cause #2 above: it put an unrelated provider ahead of the default pick.
+
+The player calls `SourceSelectionHistory.pick` (through `pickStartupSource`), which is
+`findPreferred` followed by the default. The tests therefore exercise the same code that runs in
+production.
 
 `findReady` (used for early start while links load) is unchanged and conservative. It accepts only
 the newest pick's exact release (or the same release traits), now also requiring the same
@@ -201,6 +216,13 @@ Each feature was done the same way:
 - `feat(player): fall back to same-family mirrors and recent picks`: the implementation, plus 4
   tests for the helpers, JSON round-trip with the DataStore mapper, and legacy migration (25 in
   total).
+- Review fixes add 7 more (32 in total):
+  - the default pick wins over a lower-ranked same-quality link of another provider, with and
+    without a stated resolution;
+  - resolutions inside longer tokens (`1080p60`, `2160p10`, `4KHDR`, `HD1080p`), `UHD`/`FHD`
+    counted, plain `HD` not;
+  - `1080p60` is not accepted as a mirror of an unresolved pick;
+  - combining the history key with the legacy key (history only, no history, newer legacy pick).
 
 ### Playback error: `NextLinkAfterErrorTest.kt`
 
@@ -220,7 +242,7 @@ Each feature was done the same way:
   family, no current link, and no links left.
 - `feat(player): switch to a same-family mirror when a link fails`: the implementation.
 
-With both done, all 90 tests in `:app:testPrereleaseDebugUnitTest` pass and
+With both done, all 97 tests in `:app:testPrereleaseDebugUnitTest` pass and
 `assemblePrereleaseDebug` builds.
 
 ## Remaining / not done

@@ -97,13 +97,8 @@ class EpisodeSelectionPreferenceTest {
             name = SourceCandidate::name,
             quality = SourceCandidate::quality,
         )
-        val qualityFallback = preference?.findSameQuality(
-            candidates = candidates,
-            quality = SourceCandidate::quality,
-        )
 
         assertNull(result)
-        assertEquals("same-quality", qualityFallback?.id)
     }
 
     @Test

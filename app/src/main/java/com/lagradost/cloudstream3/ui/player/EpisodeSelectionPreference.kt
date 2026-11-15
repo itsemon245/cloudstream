@@ -50,17 +50,24 @@ private fun fileSizeDistance(preferred: Double?, candidate: Double?): Double {
 /** `Qualities.Unknown.value`; providers use it when they do not know the resolution. */
 private const val UNKNOWN_QUALITY = 400
 
+// `1080p`, `2160p10` (bit depth), `1080p60` (frame rate), `HD1080p`; not part of a longer number.
 private val SOURCE_RESOLUTION_P_PATTERN =
-    Regex("""(?<![\p{L}\p{N}])(\d{3,4})[pi](?![\p{L}\p{N}])""", RegexOption.IGNORE_CASE)
+    Regex("""(?<!\p{N})(\d{3,4})[pi](?![\p{L}])""", RegexOption.IGNORE_CASE)
+// `4K`, `4KHDR`; not `x4k1` style fragments.
 private val SOURCE_RESOLUTION_K_PATTERN =
-    Regex("""(?<![\p{L}\p{N}])([248])k(?![\p{L}\p{N}])""", RegexOption.IGNORE_CASE)
+    Regex("""(?<![\p{L}\p{N}])([248])k(?!\p{N})""", RegexOption.IGNORE_CASE)
+// `UHD` = 2160 and `FHD` = 1080 as whole words. Plain `HD` (and `HDR`) is not a resolution.
+private val SOURCE_RESOLUTION_WORD_PATTERN =
+    Regex("""(?<![\p{L}\p{N}])(uhd|fhd)(?![\p{L}\p{N}])""", RegexOption.IGNORE_CASE)
+/** A name word that only states a resolution, so it cannot be the family. */
 private val SOURCE_RESOLUTION_TOKEN_PATTERN =
-    Regex("""(?:\d{3,4}[pi]|[248]k)""", RegexOption.IGNORE_CASE)
+    Regex("""(?:\p{L}*\d{3,4}[pi]\d*|[248]k\p{L}*|uhd|fhd)""", RegexOption.IGNORE_CASE)
 
 /**
  * Every resolution a source label states, as the user sees it in the source dialog
  * (`"${link.name} ${Qualities.getStringByInt(link.quality)}"`):
- * - `NNNp`/`NNNi` tokens and `2K`/`4K`/`8K` in the name, and
+ * - `NNNp`/`NNNi` (also `1080p60`, `2160p10`, `HD1080p`), `2K`/`4K`/`8K` (also `4KHDR`),
+ *   `UHD` (2160) and `FHD` (1080) in the name, but not plain `HD`, and
  * - the `quality` field when it is a real resolution (not Unknown(400) or Auto(0)).
  *
  * An empty set means "no stated resolution", which is its own class: it only matches other
@@ -79,6 +86,9 @@ internal fun sourceResolutions(name: String?, quality: Int?): Set<Int> {
                 "4" -> resolutions.add(2160)
                 "8" -> resolutions.add(4320)
             }
+        }
+        SOURCE_RESOLUTION_WORD_PATTERN.findAll(name).forEach { match ->
+            resolutions.add(if (match.value.equals("uhd", ignoreCase = true)) 2160 else 1080)
         }
     }
     if (quality != null && quality != UNKNOWN_QUALITY && quality in 144..4320) {
@@ -293,14 +303,6 @@ internal class SourceSelectionPreference private constructor(
         name = name,
         quality = quality,
     )
-
-    fun <T> findSameQuality(
-        candidates: Iterable<T>,
-        quality: (T) -> Int?,
-    ): T? {
-        val preferredQuality = this.quality ?: return null
-        return candidates.firstOrNull { quality(it) == preferredQuality }
-    }
 }
 
 /**
@@ -332,6 +334,23 @@ internal class SourceSelectionHistory private constructor(
                     .mapNotNull(SourceSelectionPreference::restore)
                     .take(LIMIT)
             )
+
+        /**
+         * Combines the history key with the single-pick key that older versions write.
+         * This version writes both, so they normally agree. When the legacy pick differs from the
+         * newest history entry, an older build (after a downgrade) made it later, so it goes on
+         * top. Without a history, the legacy pick is the whole history.
+         */
+        fun restore(
+            history: StoredSourceSelectionHistory?,
+            legacy: StoredSourceSelection?,
+        ): SourceSelectionHistory {
+            val restored = restore(history)
+            val legacyPick = SourceSelectionPreference.restore(legacy) ?: return restored
+            val newest = restored.mostRecent
+            if (newest != null && newest.isSamePick(legacyPick)) return restored
+            return restored.remember(legacy?.source, legacy?.name, legacy?.quality)
+        }
     }
 
     fun toStored(): StoredSourceSelectionHistory =
@@ -353,8 +372,11 @@ internal class SourceSelectionHistory private constructor(
      * The remembered source to start with, or null when normal priority should be used:
      * 1. for each remembered pick, newest first: the exact source, else a same-family mirror at
      *    the same resolution;
-     * 2. the previous single-pick behaviour for the newest pick (same source field / same
-     *    quality anywhere), restricted to the same stated resolution.
+     * 2. the previous match on the newest pick's `source` field (`findBest`), restricted to the
+     *    same stated resolution.
+     *
+     * There is deliberately no "any link of the same quality" step: when nothing remembered fits,
+     * CloudStream's default pick (the first candidate) is better than an unrelated provider.
      */
     fun <T> findPreferred(
         candidates: List<T>,
@@ -369,7 +391,6 @@ internal class SourceSelectionHistory private constructor(
         val preference = mostRecent ?: return null
         val sameResolution = candidates.filter { preference.hasSameResolution(name(it), quality(it)) }
         return preference.findBest(sameResolution, source, name, quality)
-            ?: preference.findSameQuality(sameResolution, quality)
     }
 
     /**

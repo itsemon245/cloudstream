@@ -251,6 +251,19 @@ class SourceSelectionHistoryTest {
     }
 
     @Test
+    fun `default pick wins over a lower-ranked same-quality link of another provider`() {
+        // Nothing of the Atlantic family is left; the default (first) candidate must be used,
+        // not the first 1080p link of an unrelated provider.
+        assertEquals(vidySeattle, history(atlanticLyra).pick(listOf(vidySeattle, dahmerIvy)))
+    }
+
+    @Test
+    fun `default pick wins over a lower-ranked link of another provider without resolution`() {
+        val otherUnknown = Link("Vidsrc [Main]", UNKNOWN)
+        assertEquals(vidlink1080, history(vidyAtlanta).pick(listOf(vidlink1080, otherUnknown)))
+    }
+
+    @Test
     fun `default priority order is used without any history`() {
         val result = SourceSelectionHistory.EMPTY.pick(listOf(vidlink1080, vidyAtlanta))
 
@@ -297,6 +310,55 @@ class SourceSelectionHistoryTest {
             setOf(1080),
             sourceResolutions("Waiting.Hai.S01E03.1080p.AMZN.DDP5.1.x264[2.41GB]", UNKNOWN),
         )
+    }
+
+    @Test
+    fun `resolution inside longer tokens is still a stated resolution`() {
+        assertEquals(setOf(1080), sourceResolutions("Vidy [Chicago] 1080p60", UNKNOWN))
+        assertEquals(setOf(2160), sourceResolutions("Vidy [Chicago] 2160p10", UNKNOWN))
+        assertEquals(setOf(2160), sourceResolutions("Vidy [Chicago] 4KHDR", UNKNOWN))
+        assertEquals(setOf(1080), sourceResolutions("Vidy [Chicago] HD1080p", UNKNOWN))
+        assertEquals(setOf(2160), sourceResolutions("Vidy [Chicago] UHD", UNKNOWN))
+        assertEquals(setOf(1080), sourceResolutions("Vidy [Chicago] FHD", UNKNOWN))
+        assertEquals(emptySet<Int>(), sourceResolutions("Vidy [Chicago] HD", UNKNOWN))
+        assertEquals(emptySet<Int>(), sourceResolutions("Vidy [Chicago] HDR x265", UNKNOWN))
+        assertEquals("vidy", sourceFamily("1080p60 Vidy [Chicago]", null))
+        assertEquals("vidy", sourceFamily("UHD Vidy [Chicago]", null))
+    }
+
+    @Test
+    fun `never falls back to a mirror whose resolution sits in a longer token`() {
+        val chicago1080p60 = Link("Vidy [Chicago] 1080p60", UNKNOWN)
+        assertEquals(vidlink1080, history(vidyAtlanta).pick(listOf(vidlink1080, chicago1080p60)))
+    }
+
+    private fun stored(link: Link) =
+        SourceSelectionPreference.create(link.source, link.name, link.quality)!!.toStored()
+
+    @Test
+    fun `restore prefers the stored history when the legacy key agrees`() {
+        val stored = history(atlanticLyra, vidyAtlanta).toStored()
+        val restored = SourceSelectionHistory.restore(stored, legacy = stored(vidyAtlanta))
+
+        assertEquals(stored, restored.toStored())
+        assertEquals(stored, SourceSelectionHistory.restore(stored, legacy = null).toStored())
+    }
+
+    @Test
+    fun `restore uses the legacy key when there is no history`() {
+        val restored = SourceSelectionHistory.restore(null, legacy = stored(vidyAtlanta))
+
+        assertEquals(history(vidyAtlanta).toStored(), restored.toStored())
+    }
+
+    @Test
+    fun `a newer legacy pick from an older app version goes on top of the history`() {
+        // History written by this version, then a downgrade where the user picked Vidy, then an
+        // upgrade again: the older build only updated the legacy key.
+        val stored = history(vidlink720, atlanticLyra).toStored()
+        val restored = SourceSelectionHistory.restore(stored, legacy = stored(vidyAtlanta))
+
+        assertEquals(history(vidlink720, atlanticLyra, vidyAtlanta).toStored(), restored.toStored())
     }
 
     @Test

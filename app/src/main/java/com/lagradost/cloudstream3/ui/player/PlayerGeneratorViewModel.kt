@@ -198,16 +198,17 @@ class PlayerGeneratorViewModel : ViewModel() {
         history: StoredSourceSelectionHistory?,
         legacy: StoredSourceSelection?,
     ) {
-        val restored = SourceSelectionHistory.restore(history)
-        sourceSelectionHistory =
-            if (restored.isEmpty()) SourceSelectionHistory.restore(legacy) else restored
+        sourceSelectionHistory = SourceSelectionHistory.restore(history, legacy)
     }
 
     fun hasPreferredSourceSelection(): Boolean = !sourceSelectionHistory.isEmpty()
 
-    /** Remembered source for this series, or null if normal priority should decide. */
-    fun findPreferredSource(links: Iterable<DisplayLink>): DisplayLink? {
-        return sourceSelectionHistory.findPreferred(
+    /**
+     * The link to start with: the remembered source for this series, else the highest priority
+     * usable link. Null when no link is usable.
+     */
+    fun pickStartupSource(links: Iterable<DisplayLink>): DisplayLink? {
+        return sourceSelectionHistory.pick(
             candidates = links.filter(DisplayLink::shouldUseLink),
             source = { it.link.first?.source },
             name = { it.link.first?.name },
