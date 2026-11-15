@@ -59,9 +59,24 @@ The repository has a `GRADLE_ENCRYPTION_KEY` secret. To create or rotate it:
    `gh secret set GRADLE_ENCRYPTION_KEY --body "$(openssl rand -base64 16)"`
 
 The workflow passes it to setup-gradle. `master` runs save the configuration cache, and pull
-requests reuse it unless they change the build scripts, `gradle.properties`, the version
-catalog or the requested tasks. A new key only makes the existing entries unreadable once;
+requests reuse it unless they change the build scripts, a Gradle property or file the build
+reads while configuring (such as the version catalog), or the tasks a job runs. A new key only makes the existing entries unreadable once;
 the next `master` run saves new ones.
+
+## Measurements
+
+GitHub-hosted `ubuntu-latest`, pull request #6. Times are from the start of the run to the end of the slowest job.
+
+| Run | Wall clock | Build and test (Gradle step) | Lint (Gradle step) |
+| --- | --- | --- | --- |
+| Before: one job, `assemblePrereleaseDebug lint check` (PR #3) | 7 min 8 s | 6 min 29 s (both, one job) | |
+| Cold: no cache for these jobs yet | 6 min 46 s | 5 min 4 s | 6 min 2 s |
+| Warm cache, configuration cache missed | 4 min 25 s | 2 min 27 s | 3 min 49 s |
+| Warm cache and configuration cache, nothing changed | 47 s | 19 s | 15 s |
+
+A pull request that changes app code lands between the last two rows: the app's compile, tests
+and lint analysis re-run (about 1.5–2.5 min each in parallel) and everything else comes from
+`master`'s cache.
 
 ## Keeping it fast
 
