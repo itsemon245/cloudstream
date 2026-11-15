@@ -15,15 +15,15 @@ import okhttp3.RequestBody.Companion.toRequestBody
 import java.io.IOException
 import java.util.concurrent.TimeUnit
 
-class WebDavSyncStore(
-    context: Context,
+class WebDavSyncStore internal constructor(
     private val config: WebDavSyncConfig,
+    private val client: OkHttpClient,
 ) : RemoteSyncStore {
-    private val client: OkHttpClient = buildDefaultClient(context).newBuilder()
-        .callTimeout(20, TimeUnit.SECONDS)
-        .readTimeout(20, TimeUnit.SECONDS)
-        .writeTimeout(20, TimeUnit.SECONDS)
-        .build()
+    constructor(
+        context: Context,
+        config: WebDavSyncConfig,
+    ) : this(config, webDavClient(buildDefaultClient(context)))
+
     private val resourceUrl = if (config.url.endsWith(".json", ignoreCase = true)) {
         config.url
     } else {
@@ -95,6 +95,13 @@ class WebDavSyncStore(
     }
 
     companion object {
+        /** Applies the WebDAV-specific client settings. Separate so tests can supply a base client. */
+        internal fun webDavClient(base: OkHttpClient): OkHttpClient = base.newBuilder()
+            .callTimeout(20, TimeUnit.SECONDS)
+            .readTimeout(20, TimeUnit.SECONDS)
+            .writeTimeout(20, TimeUnit.SECONDS)
+            .build()
+
         private const val UNVERSIONED_EXISTING = "webdav:unversioned"
         private val JSON_MEDIA_TYPE = "application/json; charset=utf-8".toMediaType()
     }
