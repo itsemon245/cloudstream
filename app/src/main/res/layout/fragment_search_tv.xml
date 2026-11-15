@@ -149,6 +149,13 @@
         android:visibility="gone"
         tools:listitem="@layout/homepage_parent" />
 
+    <include
+        android:id="@+id/search_browse"
+        layout="@layout/search_browse_genres"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="@dimen/navbar_width" />
+
     <androidx.recyclerview.widget.RecyclerView
         android:id="@+id/search_history_recycler"
         android:layout_width="match_parent"

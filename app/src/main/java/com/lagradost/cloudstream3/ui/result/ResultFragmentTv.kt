@@ -61,6 +61,7 @@ import com.lagradost.cloudstream3.utils.UIHelper.fixSystemBarsPadding
 import com.lagradost.cloudstream3.utils.UIHelper.hideKeyboard
 import com.lagradost.cloudstream3.utils.UIHelper.navigate
 import com.lagradost.cloudstream3.utils.UIHelper.populateChips
+import com.lagradost.cloudstream3.ui.browse.BrowseFragment.Companion.openBrowse
 import com.lagradost.cloudstream3.utils.UIHelper.setNavigationBarColorCompat
 import com.lagradost.cloudstream3.utils.getImageFromDrawable
 import com.lagradost.cloudstream3.utils.setText
@@ -923,7 +924,12 @@ class ResultFragmentTv : BaseFragment<FragmentResultTvBinding>(
                         comingSoon = d.comingSoon
                         resultTvComingSoon.isVisible = d.comingSoon
 
-                        populateChips(resultTag, d.tags)
+                        populateChips(
+                            resultTag,
+                            d.tags,
+                            onClick = { tag -> activity?.openBrowse(tag) },
+                            onLongClick = { tag -> activity?.openBrowse(tag, getStoredData()?.apiName) },
+                        )
                         val prefs =
                             androidx.preference.PreferenceManager.getDefaultSharedPreferences(root.context)
                         val showCast = prefs.getBoolean(

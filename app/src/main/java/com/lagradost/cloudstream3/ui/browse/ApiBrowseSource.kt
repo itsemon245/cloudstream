@@ -43,3 +43,21 @@ class ApiBrowseSource(
             is Resource.Loading -> throw BrowseLoadException("Unexpected loading state")
         }
 }
+
+/**
+ * Genres the given providers have home-page sections for, most common first, without any
+ * request. Used for the "Browse by genre" row on Search.
+ */
+fun browseGenresOf(apis: List<MainAPI>): List<Pair<String, Int>> =
+    com.lagradost.cloudstream3.ui.browse.engine.BrowsePlanner.availableGenres(apis.map { api ->
+        object : BrowseSource {
+            override val name = api.name
+            override val lang = api.lang
+            override val supportedTypes = api.supportedTypes
+            override val hasMainPage = api.hasMainPage
+            override val sectionNames = api.mainPage.map { it.name }
+            override val requestDelayMs = 0L
+            override suspend fun loadSection(sectionIndex: Int, page: Int): SectionPage =
+                throw UnsupportedOperationException()
+        }
+    })

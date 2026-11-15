@@ -94,6 +94,7 @@ import com.lagradost.cloudstream3.utils.UIHelper.fixSystemBarsPadding
 import com.lagradost.cloudstream3.utils.UIHelper.hideKeyboard
 import com.lagradost.cloudstream3.utils.UIHelper.popCurrentPage
 import com.lagradost.cloudstream3.utils.UIHelper.populateChips
+import com.lagradost.cloudstream3.ui.browse.BrowseFragment.Companion.openBrowse
 import com.lagradost.cloudstream3.utils.UIHelper.popupMenuNoIconsAndNoStringRes
 import com.lagradost.cloudstream3.utils.UIHelper.setListViewHeightBasedOnItems
 import com.lagradost.cloudstream3.utils.UIHelper.setNavigationBarColorCompat
@@ -986,7 +987,12 @@ open class ResultFragmentPhone : BaseFragment<FragmentResultSwipeBinding>(
                         }
                     }
 
-                    populateChips(resultTag, d.tags)
+                    populateChips(
+                        resultTag,
+                        d.tags,
+                        onClick = { tag -> activity?.openBrowse(tag) },
+                        onLongClick = { tag -> activity?.openBrowse(tag, getStoredData()?.apiName) },
+                    )
 
                     resultComingSoon.isVisible = d.comingSoon
                     resultDataHolder.isGone = d.comingSoon

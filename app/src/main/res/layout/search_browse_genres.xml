@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- "Browse by genre" row shown on the Search page while the query is empty. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/search_browse_root"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:background="?attr/primaryBlackBackground"
+    android:orientation="vertical"
+    android:paddingHorizontal="10dp"
+    android:paddingTop="12dp"
+    android:paddingBottom="4dp"
+    android:visibility="gone">
+
+    <LinearLayout
+        android:id="@+id/search_browse_open"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="?attr/selectableItemBackground"
+        android:focusable="true"
+        android:gravity="center_vertical"
+        android:minHeight="40dp"
+        android:orientation="horizontal">
+
+        <TextView
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="@string/browse_by_genre"
+            android:textColor="?attr/textColor"
+            android:textSize="18sp"
+            android:textStyle="bold" />
+
+        <ImageView
+            android:layout_width="24dp"
+            android:layout_height="24dp"
+            android:contentDescription="@string/browse"
+            android:src="@drawable/ic_baseline_arrow_forward_24"
+            app:tint="?attr/textColor" />
+    </LinearLayout>
+
+    <com.google.android.material.chip.ChipGroup
+        android:id="@+id/search_browse_chips"
+        style="@style/ChipParent"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="4dp" />
+</LinearLayout>
