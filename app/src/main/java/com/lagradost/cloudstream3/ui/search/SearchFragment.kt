@@ -47,6 +47,10 @@ import com.lagradost.cloudstream3.mvvm.logError
 import com.lagradost.cloudstream3.mvvm.observe
 import com.lagradost.cloudstream3.ui.APIRepository
 import com.lagradost.cloudstream3.ui.BaseAdapter
+import com.lagradost.cloudstream3.ui.browse.BrowseFragment.Companion.openBrowse
+import com.lagradost.cloudstream3.ui.browse.browseGenresOf
+import com.lagradost.cloudstream3.ui.browse.engine.GenreMatcher
+import com.lagradost.cloudstream3.utils.UIHelper.populateChips
 import com.lagradost.cloudstream3.ui.BaseFragment
 import com.lagradost.cloudstream3.ui.home.HomeFragment
 import com.lagradost.cloudstream3.ui.home.HomeFragment.Companion.bindChips
@@ -201,8 +205,30 @@ class SearchFragment : BaseFragment<FragmentSearchBinding>(
     // Null if defined as a variable
     // This needs to be run after view created
 
+    /** Whether any source has genre sections, i.e. the "Browse by genre" row has content. */
+    private var hasBrowseGenres = false
+
+    private fun bindBrowseGenres() {
+        val ctx = context ?: return
+        // Same provider list as Browse, so both share one cached genre index.
+        val apis = ctx.filterProviderByPreferredMedia(hasHomePageIsRequired = false)
+        // The genre index is cached per plugin load, but the first build parses every section
+        // name, so keep it off the main thread.
+        ioSafe {
+            val genres = browseGenresOf(apis).take(10).map { GenreMatcher.displayName(it.first) }
+            main {
+                val row = binding?.searchBrowse ?: return@main
+                hasBrowseGenres = genres.isNotEmpty()
+                populateChips(row.searchBrowseChips, genres, onClick = { activity?.openBrowse(it) }, tintLinks = false)
+                row.searchBrowseOpen.setOnClickListener { activity?.openBrowse(null) }
+                row.root.isVisible = hasBrowseGenres && binding?.mainSearch?.query.isNullOrBlank()
+            }
+        }
+    }
+
     private fun reloadRepos(success: Boolean = false) = main {
         searchViewModel.reloadRepos()
+        bindBrowseGenres()
         context?.filterProviderByPreferredMedia()?.let { validAPIs ->
             bindChips(
                 binding?.tvtypesChipsScroll?.tvtypesChips,
@@ -454,6 +480,7 @@ class SearchFragment : BaseFragment<FragmentSearchBinding>(
                     }
                 }
                 binding.apply {
+                    searchBrowse.root.isVisible = showHistory && hasBrowseGenres
                     searchHistoryRecycler.isVisible = showHistory
                     searchMasterRecycler.isVisible = !showHistory && isAdvancedSearch
                     searchAutofitResults.isVisible = !showHistory && !isAdvancedSearch

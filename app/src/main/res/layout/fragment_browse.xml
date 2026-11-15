@@ -1,0 +1,192 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:id="@+id/browse_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="?attr/primaryBlackBackground"
+    android:orientation="vertical"
+    tools:context=".ui.browse.BrowseFragment">
+
+    <!-- Bar: back, in-page search, filters -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="?attr/primaryGrayBackground"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingStart="4dp"
+        android:paddingEnd="6dp">
+
+        <ImageView
+            android:id="@+id/browse_back"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:background="?selectableItemBackgroundBorderless"
+            android:contentDescription="@string/go_back_img_des"
+            android:focusable="true"
+            android:nextFocusRight="@id/browse_search"
+            android:nextFocusDown="@id/browse_genre_pill"
+            android:padding="8dp"
+            android:src="@drawable/ic_baseline_arrow_back_24"
+            app:tint="?attr/textColor" />
+
+        <FrameLayout
+            android:layout_width="0dp"
+            android:layout_height="40dp"
+            android:layout_marginVertical="10dp"
+            android:layout_marginStart="4dp"
+            android:layout_weight="1"
+            android:background="@drawable/search_background">
+
+            <androidx.appcompat.widget.SearchView
+                android:id="@+id/browse_search"
+                android:layout_width="match_parent"
+                android:layout_height="30dp"
+                android:layout_gravity="center_vertical"
+                android:imeOptions="actionSearch"
+                android:inputType="text"
+                android:nextFocusLeft="@id/browse_back"
+                android:nextFocusRight="@id/browse_filter"
+                android:nextFocusDown="@id/browse_genre_pill"
+                android:paddingStart="-10dp"
+                app:closeIcon="@drawable/ic_baseline_close_24"
+                app:iconifiedByDefault="false"
+                app:queryBackground="@color/transparent"
+                app:queryHint="@string/browse_search_hint"
+                app:searchIcon="@drawable/search_icon"
+                tools:ignore="RtlSymmetry" />
+        </FrameLayout>
+
+        <FrameLayout
+            android:id="@+id/browse_filter"
+            android:layout_width="44dp"
+            android:layout_height="44dp"
+            android:layout_marginStart="2dp"
+            android:background="?selectableItemBackgroundBorderless"
+            android:contentDescription="@string/browse_filters"
+            android:focusable="true"
+            android:nextFocusLeft="@id/browse_search"
+            android:nextFocusDown="@id/browse_genre_pill">
+
+            <ImageView
+                android:layout_width="24dp"
+                android:layout_height="24dp"
+                android:layout_gravity="center"
+                android:importantForAccessibility="no"
+                android:src="@drawable/ic_baseline_tune_24"
+                app:tint="?attr/textColor" />
+
+            <View
+                android:id="@+id/browse_filter_dot"
+                android:layout_width="8dp"
+                android:layout_height="8dp"
+                android:layout_gravity="top|end"
+                android:layout_marginTop="9dp"
+                android:layout_marginEnd="8dp"
+                android:background="@drawable/browse_dot"
+                android:visibility="gone"
+                tools:visibility="visible" />
+        </FrameLayout>
+    </LinearLayout>
+
+    <!-- Genre / Type / Sort pills -->
+    <HorizontalScrollView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="?attr/primaryGrayBackground"
+        android:fadingEdge="horizontal"
+        android:requiresFadingEdge="horizontal"
+        android:scrollbars="none">
+
+        <LinearLayout
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:paddingHorizontal="8dp"
+            android:paddingBottom="6dp">
+
+            <com.google.android.material.chip.Chip
+                android:id="@+id/browse_genre_pill"
+                style="@style/BrowsePill"
+                android:checked="true"
+                android:nextFocusRight="@id/browse_type_pill"
+                android:nextFocusDown="@id/browse_results"
+                tools:text="Action" />
+
+            <com.google.android.material.chip.Chip
+                android:id="@+id/browse_type_pill"
+                style="@style/BrowsePill"
+                android:nextFocusLeft="@id/browse_genre_pill"
+                android:nextFocusRight="@id/browse_sort_pill"
+                android:nextFocusDown="@id/browse_results"
+                tools:text="@string/browse_all_types" />
+
+            <com.google.android.material.chip.Chip
+                android:id="@+id/browse_sort_pill"
+                style="@style/BrowsePill"
+                android:nextFocusLeft="@id/browse_type_pill"
+                android:nextFocusDown="@id/browse_results"
+                tools:text="@string/browse_sort_relevance" />
+        </LinearLayout>
+    </HorizontalScrollView>
+
+    <com.google.android.material.progressindicator.LinearProgressIndicator
+        android:id="@+id/browse_progress"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:max="1000"
+        app:indicatorColor="?attr/colorPrimary"
+        app:trackColor="?attr/primaryGrayBackground"
+        app:trackThickness="2dp" />
+
+    <FrameLayout
+        android:layout_width="match_parent"
+        android:layout_height="match_parent">
+
+        <com.lagradost.cloudstream3.ui.AutofitRecyclerView
+            android:id="@+id/browse_results"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:clipToPadding="false"
+            android:descendantFocusability="afterDescendants"
+            android:nextFocusLeft="@id/nav_rail_view"
+            android:nextFocusUp="@id/browse_genre_pill"
+            android:orientation="vertical"
+            android:paddingStart="8dp"
+            android:paddingTop="8dp"
+            android:paddingEnd="8dp"
+            android:paddingBottom="80dp"
+            app:spanCount="3"
+            tools:listitem="@layout/search_result_grid" />
+
+        <LinearLayout
+            android:id="@+id/browse_empty"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center"
+            android:gravity="center"
+            android:orientation="vertical"
+            android:padding="24dp"
+            android:visibility="gone"
+            tools:visibility="visible">
+
+            <TextView
+                android:id="@+id/browse_empty_text"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:gravity="center"
+                android:textColor="?attr/textColor"
+                android:textSize="16sp"
+                tools:text="@string/browse_no_source_for_genre" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/browse_empty_search"
+                style="@style/WhiteButton"
+                android:layout_width="wrap_content"
+                android:layout_marginTop="16dp"
+                tools:text="@string/browse_search_all_for" />
+        </LinearLayout>
+    </FrameLayout>
+</LinearLayout>

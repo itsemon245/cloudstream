@@ -504,6 +504,7 @@ class MainActivity : AppCompatActivity(), ColorPickerDialogListener, BiometricCa
         val isNavVisible = listOf(
             R.id.navigation_home,
             R.id.navigation_search,
+            R.id.navigation_browse,
             R.id.navigation_library,
             R.id.navigation_downloads,
             R.id.navigation_settings,
@@ -574,6 +575,12 @@ class MainActivity : AppCompatActivity(), ColorPickerDialogListener, BiometricCa
              * highlight the wrong one in UI.
              */
             when (destination.id) {
+                // Browse lives under the Search tab.
+                R.id.navigation_browse -> {
+                    navRailView.menu.findItem(R.id.navigation_search).isChecked = true
+                    navView.menu.findItem(R.id.navigation_search).isChecked = true
+                }
+
                 in listOf(
                     R.id.navigation_downloads,
                     R.id.navigation_download_child,

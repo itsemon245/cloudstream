@@ -1,5 +1,6 @@
 package com.lagradost.cloudstream3.utils
 
+import androidx.core.graphics.ColorUtils
 import android.Manifest
 import android.annotation.SuppressLint
 import android.app.Activity
@@ -104,16 +105,32 @@ object UIHelper {
                 || Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU)
     }
 
+    /**
+     * Fills [view] with tag chips.
+     *
+     * When [onClick] is set the chips become links: focusable, clickable and tinted with a light
+     * shade of the accent color (readable on the dark chip). [onLongClick] is optional.
+     * Without callbacks the chips stay plain, non-interactive labels.
+     */
     fun populateChips(
         view: ChipGroup?,
         tags: List<String>,
         @StyleRes style: Int = R.style.ChipFilled,
         @AttrRes textColor: Int? = R.attr.white,
+        onClick: ((String) -> Unit)? = null,
+        onLongClick: ((String) -> Unit)? = null,
+        tintLinks: Boolean = true,
     ) {
         if (view == null) return
         view.removeAllViews()
         val context = view.context ?: return
         val maxTags = tags.take(10) // Limited because they are too much
+        val isLink = onClick != null
+        val linkColor = if (isLink && tintLinks) ColorUtils.blendARGB(
+            context.colorFromAttribute(R.attr.colorPrimary),
+            Color.WHITE,
+            0.45f
+        ) else null
 
         maxTags.forEach { tag ->
             val chip = Chip(context)
@@ -127,10 +144,19 @@ object UIHelper {
             chip.text = tag
             chip.isChecked = false
             chip.isCheckable = false
-            chip.isFocusable = false
-            chip.isClickable = false
-            textColor?.let {
+            chip.isFocusable = isLink
+            chip.isClickable = isLink
+            if (linkColor != null) {
+                chip.setTextColor(linkColor)
+            } else textColor?.let {
                 chip.setTextColor(context.colorFromAttribute(it))
+            }
+            if (onClick != null) {
+                chip.tag = null // ChipFilled marks chips as not focusable on TV
+                chip.setOnClickListener { onClick(tag) }
+                if (onLongClick != null) {
+                    chip.setOnLongClickListener { onLongClick(tag); true }
+                }
             }
             view.addView(chip)
         }
