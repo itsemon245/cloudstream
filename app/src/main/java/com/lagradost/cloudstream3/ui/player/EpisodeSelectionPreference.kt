@@ -147,6 +147,12 @@ internal class SourceSelectionPreference private constructor(
     fun hasSameResolution(name: String?, quality: Int?): Boolean =
         sourceResolutions(name.selectionKey(), quality) == resolutions
 
+    /** Same family (see [sourceFamily]) at the same resolution (see [sourceResolutions]). */
+    fun isMirror(source: String?, name: String?, quality: Int?): Boolean =
+        family != null &&
+                sourceFamily(name.selectionKey(), source.selectionKey()) == family &&
+                hasSameResolution(name, quality)
+
     /** Same name at the same resolution; a matching source field breaks ties. */
     fun <T> findExact(
         candidates: Iterable<T>,
@@ -173,7 +179,7 @@ internal class SourceSelectionPreference private constructor(
         name: (T) -> String?,
         quality: (T) -> Int?,
     ): T? {
-        val family = family ?: return null
+        if (family == null) return null
         var best: T? = null
         var bestSourceRank = -1
         var bestTraitOverlap = -1
@@ -181,8 +187,7 @@ internal class SourceSelectionPreference private constructor(
 
         for (candidate in candidates) {
             val candidateName = name(candidate).selectionKey()
-            if (sourceFamily(candidateName, source(candidate).selectionKey()) != family) continue
-            if (!hasSameResolution(candidateName, quality(candidate))) continue
+            if (!isMirror(source(candidate), candidateName, quality(candidate))) continue
 
             val sourceRank =
                 if (sourceKey != null && source(candidate).selectionKey() == sourceKey) 1 else 0
@@ -396,7 +401,9 @@ internal class SourceSelectionHistory private constructor(
 }
 
 /**
- * The link to switch to after the current one failed during playback (`nextMirror`).
+ * The link to switch to after the current one failed during playback (`nextMirror`):
+ * first another same-family mirror at the same resolution that has not failed, otherwise the
+ * next untried link in priority order.
  *
  * [candidates] are all links in quality-profile priority order (`VideoState.sortLinks`).
  * Returns null when there is nothing left to try.
@@ -411,8 +418,28 @@ internal fun <T> nextLinkAfterError(
     quality: (T) -> Int?,
 ): T? {
     val currentIndex = candidates.indexOfFirst(isCurrent)
+    val current = candidates.getOrNull(currentIndex)
+    val failed = current?.let { SourceSelectionPreference.create(source(it), name(it), quality(it)) }
+    fun T.isUntried() = !isCurrent(this) && isUsable(this) && !hasErrored(this)
+
+    // 1. Another mirror of the failed link's family at the same resolution, best match first.
+    if (failed != null) {
+        failed.findMirror(candidates.filter { it.isUntried() }, source, name, quality)
+            ?.let { return it }
+    }
+
+    // 2. Priority order, treating the family as one block at the position of its
+    //    highest-ranked mirror that was tried, so jumping up to a mirror never skips the links
+    //    between it and the failed one. Links that already failed are not retried.
+    val anchor = if (failed == null) {
+        currentIndex
+    } else {
+        candidates.indexOfFirst {
+            (isCurrent(it) || hasErrored(it)) && failed.isMirror(source(it), name(it), quality(it))
+        }.takeIf { it >= 0 }?.coerceAtMost(currentIndex) ?: currentIndex
+    }
     return candidates.withIndex()
-        .firstOrNull { it.index > currentIndex && isUsable(it.value) }
+        .firstOrNull { it.index > anchor && it.value.isUntried() }
         ?.value
 }
 

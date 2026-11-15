@@ -1,6 +1,7 @@
 # Source fallback across episodes
 
-Status: diagnosed, failing tests added, fix implemented on branch
+Status: diagnosed, failing tests added, fix implemented (episode start and playback-error
+switching) on branch
 `claude/source-fallback-mirrors`.
 
 ## Symptom
@@ -52,9 +53,11 @@ Line numbers are from the pre-fix tree (`ee7e594`), under
    That is expected; the problem is that steps 1–4 fall through to it, or to a cross-family pick,
    far too often.
 
-(The 2004 toast is a separate issue: it comes from the dead link itself. On error,
-`nextMirror`/`getNextLink`, `GeneratorPlayer.kt:1724-1745`, moves to the next link in
-priority order, again ignoring the family. That code is unchanged; see *Remaining*.)
+6. **Switching after a playback error ignores the family as well.** When a link fails (the 2004
+   toast), `playerError` marks it as errored and `PlayerView` calls `nextMirror()` →
+   `getNextLink()` (`GeneratorPlayer.kt:1724-1745`). That simply takes the next usable link after
+   the current one in priority order. If `Vidy [Atlanta]` fails, the player can jump to an
+   unrelated, often equally broken, provider, even though `Vidy [Chicago]` is in the list.
 
 ## Design
 
@@ -142,42 +145,87 @@ the newest pick's exact release (or the same release traits), now also requiring
 resolution. A mirror that arrives early must not win over the exact source that may still be
 loading. When loading finishes, `startPlayer` runs the full `findPreferred`.
 
+### Switching after a playback error: `nextLinkAfterError`
+
+`getNextLink` (used by `hasNextMirror`/`nextMirror`) now calls a pure function:
+
+1. **Same-family mirror of the failed link** at the same resolution that is usable and has not
+   failed. It uses the same `findMirror` ranking as above (source, release traits, file size,
+   priority), wherever the mirror is in the list. Each failure adds the link to `erroredLinks`,
+   so every mirror is tried at most once.
+2. **Otherwise, priority order as before**, with two refinements:
+   - The family counts as one block at the position of its highest-ranked mirror that was
+     tried. If the player jumped *up* to a mirror and the family is then exhausted, it continues
+     below that position instead of skipping the links in between.
+   - Links that already failed are not retried. Before, they were retried only when
+     "Hide error sources" was off.
+
+   Links ranked above the whole family are still not tried, as before. With no family match,
+   and nothing already failed, the result is identical to the old "next usable link after the
+   current one".
+3. `null` when nothing untried is left, which leads to "no links found", as before.
+
+The hard resolution rule applies here too: a failed `Vidy [Atlanta]` never switches to
+`Vidy [Atlanta] 4K`, and a failed `Atlantic [Lyra] 1080p` never switches to
+`Atlantic [Silvia] 720p` (those go to the next link in order instead).
+
 ## Tests
 
-The tests are in `app/src/test/java/com/lagradost/cloudstream3/ui/player/SourceSelectionHistoryTest.kt`.
+The tests are in `app/src/test/java/com/lagradost/cloudstream3/ui/player/`.
 
-Order of the commits:
+Each feature was done the same way:
 
-1. `refactor(player): extract …`: moves the old startup chain unchanged into
-   `SourceSelectionHistory` (`LIMIT = 1`, `findBest → findSameQuality → first`).
-2. `test(player): add failing tests …`: on that code, **9 of 21 new tests failed** (assertion
-   failures, not compile errors). The 18 existing `EpisodeSelectionPreferenceTest` tests still
-   passed:
-   - never falls back to a family mirror whose name states 4K
-   - stored history restores every remembered pick in order
-   - history keeps the six most recent distinct picks, newest first
-   - resolution stated in the name equals the same resolution in the quality field
-   - second most recent pick is used when the latest family is missing
-   - third most recent pick is used when the two latest are missing
-   - missing 1080p mirror falls back to a 1080p mirror of the same family
-   - release names of one provider form a family and the closest release wins
-   - missing mirror falls back to another mirror of the same family without resolution
+1. Extract the current logic unchanged into a pure function.
+2. Add tests and check that the new behaviour's tests fail on the old logic (assertion failures,
+   not compile errors).
+3. Implement.
 
-   The other 12 new tests pass on both versions and guard behaviour that must not regress: exact
-   wins, refusing 4K/720p/unknown mirrors, newest pick wins, default order, and early-start
-   conservatism.
-3. `feat(player): …`: the implementation, plus 4 tests for the pure helpers, JSON round-trip with
-   the DataStore mapper, and legacy migration. All 25 `SourceSelectionHistoryTest` tests and all
-   18 `EpisodeSelectionPreferenceTest` tests pass, and the full `:app:testPrereleaseDebugUnitTest`
-   suite passes (77 tests).
+### Episode start: `SourceSelectionHistoryTest.kt`
+
+- `refactor(player): extract startup source choice …`: moves the old chain unchanged into
+  `SourceSelectionHistory` (`LIMIT = 1`, `findBest → findSameQuality → first`).
+- `test(player): add failing tests for mirror and history …`: **9 of 21 failed** on the old
+  logic. The 18 existing `EpisodeSelectionPreferenceTest` tests still passed.
+  - never falls back to a family mirror whose name states 4K
+  - stored history restores every remembered pick in order
+  - history keeps the six most recent distinct picks, newest first
+  - resolution stated in the name equals the same resolution in the quality field
+  - second most recent pick is used when the latest family is missing
+  - third most recent pick is used when the two latest are missing
+  - missing 1080p mirror falls back to a 1080p mirror of the same family
+  - release names of one provider form a family and the closest release wins
+  - missing mirror falls back to another mirror of the same family without resolution
+
+  The other 12 guard behaviour that must not regress: exact wins, refusing 4K/720p/unknown
+  mirrors, newest pick wins, default order, and early-start conservatism.
+- `feat(player): fall back to same-family mirrors and recent picks`: the implementation, plus 4
+  tests for the helpers, JSON round-trip with the DataStore mapper, and legacy migration (25 in
+  total).
+
+### Playback error: `NextLinkAfterErrorTest.kt`
+
+- `refactor(player): extract error mirror switching …`: moves the old `getNextLink` rule
+  unchanged into `nextLinkAfterError`.
+- `test(player): add failing tests for same-family mirror switching on error`: **8 of 13
+  failed** on the old logic:
+  - switches to another same-family mirror (below and above the failed one)
+  - skips mirrors that already failed, and hidden ones
+  - another link with the same name counts as a mirror
+  - the closest release of the same provider wins
+  - links that already failed are not retried in priority order
+  - every mirror of the family is tried, then the order continues without skipping links, and
+    switching ends
+
+  The other 5 guard the unchanged parts: refusing 4K/720p mirrors, next in order without a
+  family, no current link, and no links left.
+- `feat(player): switch to a same-family mirror when a link fails`: the implementation.
+
+With both done, all 90 tests in `:app:testPrereleaseDebugUnitTest` pass and
+`assemblePrereleaseDebug` builds.
 
 ## Remaining / not done
 
-- **Error-driven mirror switching** (`getNextLink`/`nextMirror`) still moves to the next link in
-  priority order. It could reuse `findMirror` to prefer the next same-family, same-resolution
-  mirror. That is left out on purpose, so this change only affects the startup choice.
 - Picks are remembered only when the user presses Apply in the dialog. Automatic switches after
   an error are not recorded, which is deliberate: a fallback should not overwrite the user's
   choice.
-- Not run on a device or emulator; none is available here. Coverage is unit tests plus an
-  `assemblePrereleaseDebug` build.
+- Not run on a device or emulator; none is available here.
