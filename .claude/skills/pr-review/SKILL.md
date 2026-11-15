@@ -23,7 +23,7 @@ A critical review of an open pull request before it merges. **Report first, with
 
 ### 1. Set up an isolated checkout
 - Read the PR: number, title, body, head and base branches, author, files, commits and check status. Use `gh pr view <PR> --json number,title,body,headRefName,baseRefName,author,files,commits,statusCheckRollup` where `gh` works; in a Claude Code cloud session use the GitHub MCP tools (`pull_request_read` with `get`, `get_files`, `get_status`) instead.
-- Check out the PR in a **fresh git worktree**, never in the user's main checkout: `git fetch origin <headRefName> <baseRefName>` first, then `git worktree add <path> origin/<headRefName>`. Copy `local.properties` into the worktree (it holds `sdk.dir`).
+- Check out the PR in a **fresh local clone**, never in the user's main checkout: `git fetch origin <headRefName> <baseRefName>` first, then `git clone --shared <main checkout> <path>` and, in the clone, `git fetch <main checkout> 'refs/remotes/origin/<headRefName>:refs/remotes/origin/<headRefName>' 'refs/remotes/origin/<baseRefName>:refs/remotes/origin/<baseRefName>'` and `git checkout --detach origin/<headRefName>` (fetching the base too lets the diff below run there). Don't use `git worktree`: the app's `generateGitHash` task reads `../.git/HEAD`, which doesn't exist in a worktree, so `assemblePrereleaseDebug` fails there. Copy `local.properties` into the clone (it holds `sdk.dir`).
 - Diff against the merge base: `git diff origin/<base>...origin/<head>`. This is a fork: PRs normally target `master`; check `baseRefName`.
 - Note the CI state. A failing or pending check is context, not a finding. Only report it if you can tie it to the diff.
 
@@ -75,7 +75,7 @@ Unit tests are JUnit in `app/src/test`, `library/src/commonTest` and `library/sr
 - Build: `./gradlew --no-daemon --max-workers=2 assemblePrereleaseDebug`. Run `library:checkKotlinAbi` when the diff touches `library`.
 - **Environment:** the build needs a JDK 17 toolchain and the Android SDK (`sdk.dir` in `local.properties`). Maven Central can answer 429 to shared cloud IPs; wait a minute and retry rather than reporting it. No emulator is available in cloud sessions, so `androidTest` can't run there; say so under Manual checks instead.
 
-1. **Coverage gaps:** for every behaviour the PR changes, find the test that would fail if it broke. Check this by reasoning about the assertion; where it's cheap, break the code temporarily in the throwaway worktree and run the test. **Report only the behaviours with no such test.** Leave covered behaviours out of the report.
+1. **Coverage gaps:** for every behaviour the PR changes, find the test that would fail if it broke. Check this by reasoning about the assertion; where it's cheap, break the code temporarily in the throwaway clone and run the test. **Report only the behaviours with no such test.** Leave covered behaviours out of the report.
 2. **Missing edge cases.** At least consider:
    - data written by the previous release (old preference values, old sync/backup JSON);
    - empty, null, huge, unicode and odd-cased input (titles, source names, URLs);
@@ -176,4 +176,4 @@ Write the way you'd brief a teammate, not as a log.
 ~~~
 
 ### 8. Hand back
-Reply with the verdict line, the Fix table, the Decide questions, and the report path. The reply follows the same leave-out rules as the report. Then stop and let the user choose what to fix. Remove the review worktree only if it's clean and it was yours.
+Reply with the verdict line, the Fix table, the Decide questions, and the report path. The reply follows the same leave-out rules as the report. Then stop and let the user choose what to fix. Delete the review clone when you are done, if it was yours and holds no work worth keeping.
