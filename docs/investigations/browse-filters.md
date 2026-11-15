@@ -228,7 +228,10 @@ phone row = blue accent, landscape row = teal accent; both just follow the user'
    history. Genres = the ones most installed sources have a section for. Hidden when no source has
    any genre section.
 2. **Browse page**
-   * Bar: back, "Browse", filter button (dot when sheet-only filters are active).
+   * Bar: back, a "Search in Browse…" field, filter button (dot when sheet-only filters are
+     active). The field filters the loaded pool by title (case/diacritics-insensitive, also
+     matches `otherName`), debounced ~150 ms, no network. When nothing matches it shows
+     "Search all sources for *q*" → opens the normal Search with that query.
    * Three pills: **Genre ▾**, **Type ▾**, **Sort ▾**. Each opens a small single-purpose picker
      (reusing `sort_bottom_sheet` / `sort_bottom_single_choice`), the filter button opens the full
      sheet.
@@ -317,11 +320,13 @@ Order of work: engine + tests → view model → Browse page → sheets → Sear
 build `assemblePrereleaseDebug` + `testPrereleaseDebugUnitTest`. No emulator here, so UI is verified
 by build + unit tests only; you test on device.
 
-## 10. Open questions for the user
+## 10. Decisions (from review)
 
-1. Pills: each opens its own small picker (proposed), or all open the full filter sheet?
-2. Optional `@Prerelease` provider API: follow-up PR (proposed) or in this change?
-3. Country: drop it entirely (proposed — no data for it); per-source language stays in the Sources list?
-4. Default sources: all installed respecting the language setting (proposed), or Search's saved selection?
-5. Remember last type/sort/rating between visits (proposed), or always start fresh?
-6. Opt-in "verify genres by opening titles" mode: later, or never?
+1. Pills open their own small pickers; the filter button opens the full sheet.
+2. Optional `@Prerelease` provider API: follow-up change, not in this one (no `library` changes).
+3. Country: dropped (no reliable data). Source language is shown in the Sources list only.
+4. Default sources: all installed, respecting the provider-language setting.
+5. Last type / sort / rating / chosen sources are remembered; genre comes from the entry point.
+6. No "verify genres by opening titles" mode.
+7. One PR with multiple commits (opened only when asked).
+8. Added: search field on the Browse page, filtering loaded results locally (see §6.2).
