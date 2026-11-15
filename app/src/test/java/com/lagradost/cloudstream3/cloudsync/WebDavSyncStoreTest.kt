@@ -215,4 +215,69 @@ class WebDavSyncStoreTest {
             succeeded && server.text(filePath) == null,
         )
     }
+
+    // ---------------------------------------------------------------------------------------
+    // Guards for the fix.
+    // ---------------------------------------------------------------------------------------
+
+    @Test
+    fun `html page served directly with 200 is reported and never overwrites the sync file`() {
+        val original = cloudSyncJson.encodeToString(localDocument)
+        server.put(filePath, original.toByteArray())
+        server.override(
+            "GET", filePath,
+            FakeWebDavServer.Override(
+                200,
+                mapOf("Content-Type" to "text/html"),
+                "<html><body>Scheduled maintenance</body></html>".toByteArray(),
+            ),
+        )
+
+        val error = runCatching { syncOnce() }.exceptionOrNull()
+
+        assertTrue("Expected an IOException, got $error", error is IOException)
+        assertTrue(error!!.message.orEmpty().contains("text/html"))
+        assertEquals(original, server.text(filePath))
+        assertEquals(setOf(filePath), server.files.keys)
+    }
+
+    @Test
+    fun `empty remote file is replaced without creating a backup`() {
+        server.put(filePath, ByteArray(0))
+
+        syncOnce()
+
+        assertEquals(setOf(filePath), server.files.keys)
+        assertEquals(localDocument.records, remoteDocument().records)
+    }
+
+    @Test
+    fun `existing remote records are merged, not replaced`() {
+        val remoteRecord = "video_pos_dur/7" to CloudSyncRecord("remote", 9L, "tablet")
+        server.put(
+            filePath,
+            cloudSyncJson.encodeToString(
+                CloudSyncDocument(initialized = true, records = mapOf(remoteRecord))
+            ).toByteArray(),
+        )
+
+        syncOnce()
+
+        assertEquals(localDocument.records + remoteRecord, remoteDocument().records)
+    }
+
+    @Test
+    fun `sync client bypasses the shared cache and does not follow redirects`() {
+        val base = OkHttpClient.Builder()
+            .cache(okhttp3.Cache(kotlin.io.path.createTempDirectory().toFile(), 1024))
+            .callTimeout(20, java.util.concurrent.TimeUnit.SECONDS)
+            .build()
+
+        val client = WebDavSyncStore.webDavClient(base)
+
+        assertEquals(null, client.cache)
+        assertFalse(client.followRedirects)
+        assertFalse(client.followSslRedirects)
+        assertEquals("Whole-call timeout aborts large uploads mid-body", 0, client.callTimeoutMillis)
+    }
 }

@@ -1,6 +1,7 @@
 # Investigation: "WebDAV • Waiting to retry: WebDAV sync file is invalid" (Koofr)
 
-**Status:** diagnosed. Failing tests added, fix not implemented yet.
+**Status:** fixed (see "Implemented fix" at the end). The tests below failed before the fix
+and pass after it.
 **Branch:** `claude/webdav-sync-invalid-file`
 
 ## Summary
@@ -142,7 +143,7 @@ Location: `app/src/test/java/com/lagradost/cloudstream3/cloudsync/`
   read → merge → write loop from `CloudSyncManager.sync()`, which needs an Android context and
   so can't be run directly in a JVM unit test.
 
-| Test | Current result |
+| Test | Before the fix |
 |---|---|
 | `control - a large document written by us is read back intact` | passes |
 | `zero-byte remote file left by an interrupted upload does not block sync` | **FAILS** |
@@ -213,3 +214,37 @@ in on their next sync.
   https://forums.zotero.org/discussion/132802/webdav-verification-suddenly-failing-with-http-405-on-koofr
 - Koofr returning HTTP 423 on PUT after a timeout (Zotero forum):
   https://forums.zotero.org/discussion/133306/
+
+## Implemented fix
+
+All changes are in `WebDavSyncStore.kt`:
+
+- **Response classification (plan step 1):** a 3xx gives "WebDAV server redirected to <host>
+  (code); check the sync URL". An HTML or XML `Content-Type` gives "unexpected text/html
+  response…", and nothing is overwritten. A 204, or a 200 with an empty body, is treated as an
+  empty document using the server's ETag, so the next write replaces it with `If-Match`.
+- **Recovery (plan step 2):** a non-empty body that can't be decoded is first saved to
+  `cloudstream-sync-v1.json.corrupt-<epochMillis>` (PUT with `If-None-Match: *`). Then an empty
+  document is returned with the corrupt file's ETag, so the normal merge → `If-Match` write
+  replaces it. If the backup fails, sync stops with an error and the file is left alone. This
+  lives in the store, so `CloudSyncManager` is unchanged.
+- **Redirects (plan step 4):** turned off for the WebDAV client (`followRedirects(false)`,
+  `followSslRedirects(false)`).
+- **Cache (plan step 5):** `cache(null)` on the WebDAV client.
+- **Timeouts (plan step 6, partly):** the 20 s whole-call `callTimeout` is removed. Connect
+  timeout is now 20 s, and read/write timeouts are 30 s of inactivity, so a slow but
+  progressing upload is no longer aborted half way.
+
+Deliberately **not** done:
+
+- **Atomic temp-file + MOVE upload (plan step 3).** A plain `MOVE` can't carry a precondition
+  on the *destination*. That needs an RFC 4918 tagged `If` header, and I couldn't check whether
+  Koofr honours one. Losing `If-Match` would silently drop other devices' updates, which is
+  worse than the current behaviour. Corrupt files are now recovered and the upload timeout no
+  longer cuts uploads short, so conditional PUT is kept.
+- **Tombstone pruning (plan step 6, partly).** Pruning lets a device that was offline longer
+  than the cut-off bring deleted entries back. Tombstones are small (`value = null`), so the
+  growth doesn't justify that risk.
+- **Google Drive** (`GoogleDriveSyncStore.kt:42`) still throws on an unreadable file. Drive
+  uploads are atomic, so a truncated file is far less likely there. If this ever shows up in
+  practice, the same recovery approach applies.
