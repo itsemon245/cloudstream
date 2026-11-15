@@ -1,0 +1,211 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Shown as a bottom sheet on phones and as a right-side panel in landscape / on TV. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="?attr/primaryGrayBackground"
+    android:orientation="vertical">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingStart="20dp"
+        android:paddingTop="12dp"
+        android:paddingEnd="8dp">
+
+        <TextView
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="@string/browse_filters"
+            android:textColor="?attr/textColor"
+            android:textSize="20sp"
+            android:textStyle="bold" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/filter_reset"
+            style="@style/Widget.Material3.Button.TextButton"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/browse_reset"
+            android:textColor="?attr/grayTextColor" />
+    </LinearLayout>
+
+    <androidx.core.widget.NestedScrollView
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:fillViewport="false">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical">
+
+            <TextView
+                style="@style/BrowseSheetLabel"
+                android:text="@string/browse_genre" />
+
+            <com.google.android.material.chip.ChipGroup
+                android:id="@+id/filter_genres"
+                style="@style/BrowseSheetChips" />
+
+            <TextView
+                style="@style/BrowseSheetLabel"
+                android:text="@string/browse_type" />
+
+            <com.google.android.material.chip.ChipGroup
+                android:id="@+id/filter_types"
+                style="@style/BrowseSheetChips" />
+
+            <TextView
+                style="@style/BrowseSheetLabel"
+                android:text="@string/browse_sort" />
+
+            <com.google.android.material.chip.ChipGroup
+                android:id="@+id/filter_sort"
+                style="@style/BrowseSheetChips"
+                app:selectionRequired="true"
+                app:singleSelection="true" />
+
+            <TextView
+                style="@style/BrowseSheetLabel"
+                android:text="@string/browse_rating" />
+
+            <com.google.android.material.chip.ChipGroup
+                android:id="@+id/filter_rating"
+                style="@style/BrowseSheetChips"
+                app:selectionRequired="true"
+                app:singleSelection="true" />
+
+            <View style="@style/BrowseSheetDivider" />
+
+            <LinearLayout
+                android:id="@+id/filter_sources_row"
+                style="@style/BrowseSheetRow">
+
+                <TextView
+                    style="@style/BrowseSheetRowTitle"
+                    android:text="@string/browse_sources" />
+
+                <TextView
+                    android:id="@+id/filter_sources_value"
+                    style="@style/BrowseSheetRowValue"
+                    tools:text="All installed · 11 have Action" />
+
+                <ImageView
+                    android:layout_width="18dp"
+                    android:layout_height="18dp"
+                    android:importantForAccessibility="no"
+                    android:src="@drawable/ic_baseline_keyboard_arrow_right_24"
+                    app:tint="?attr/grayTextColor" />
+            </LinearLayout>
+
+            <View style="@style/BrowseSheetDivider" />
+
+            <LinearLayout
+                android:id="@+id/filter_more_row"
+                style="@style/BrowseSheetRow">
+
+                <TextView
+                    style="@style/BrowseSheetRowTitle"
+                    android:text="@string/browse_more" />
+
+                <TextView
+                    style="@style/BrowseSheetRowValue"
+                    android:text="@string/browse_more_summary" />
+
+                <ImageView
+                    android:id="@+id/filter_more_arrow"
+                    android:layout_width="18dp"
+                    android:layout_height="18dp"
+                    android:importantForAccessibility="no"
+                    android:src="@drawable/ic_baseline_keyboard_arrow_down_24"
+                    app:tint="?attr/grayTextColor" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:id="@+id/filter_more"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:paddingBottom="8dp"
+                android:visibility="gone"
+                tools:visibility="visible">
+
+                <LinearLayout style="@style/BrowseSheetRow">
+
+                    <TextView
+                        style="@style/BrowseSheetRowTitle"
+                        android:text="@string/browse_year" />
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/filter_year_from"
+                        style="@style/BrowseSheetValueButton"
+                        tools:text="2015" />
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:paddingHorizontal="6dp"
+                        android:text="–"
+                        android:textColor="?attr/grayTextColor"
+                        tools:ignore="HardcodedText" />
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/filter_year_to"
+                        style="@style/BrowseSheetValueButton"
+                        tools:text="Any" />
+                </LinearLayout>
+
+                <TextView
+                    style="@style/BrowseSheetLabel"
+                    android:layout_marginTop="4dp"
+                    android:text="@string/browse_audio" />
+
+                <com.google.android.material.chip.ChipGroup
+                    android:id="@+id/filter_audio"
+                    style="@style/BrowseSheetChips" />
+
+                <com.google.android.material.materialswitch.MaterialSwitch
+                    android:id="@+id/filter_hide_cam"
+                    style="@style/BrowseSheetSwitch"
+                    android:text="@string/browse_hide_cam" />
+
+                <com.google.android.material.materialswitch.MaterialSwitch
+                    android:id="@+id/filter_match_all"
+                    style="@style/BrowseSheetSwitch"
+                    android:text="@string/browse_match_all_genres" />
+
+                <com.google.android.material.materialswitch.MaterialSwitch
+                    android:id="@+id/filter_hide_unknown"
+                    style="@style/BrowseSheetSwitch"
+                    android:text="@string/browse_hide_unknown" />
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:paddingHorizontal="20dp"
+                    android:text="@string/browse_hide_unknown_summary"
+                    android:textColor="?attr/grayTextColor"
+                    android:textSize="12sp" />
+            </LinearLayout>
+        </LinearLayout>
+    </androidx.core.widget.NestedScrollView>
+
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/filter_apply"
+        android:layout_width="match_parent"
+        android:layout_height="52dp"
+        android:layout_marginHorizontal="20dp"
+        android:layout_marginTop="8dp"
+        android:layout_marginBottom="16dp"
+        app:backgroundTint="?attr/colorPrimary"
+        android:textColor="?attr/colorOnPrimary"
+        app:cornerRadius="6dp"
+        tools:text="Show 132 titles" />
+</LinearLayout>

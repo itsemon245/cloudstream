@@ -120,6 +120,96 @@
         <item name="textColor">@color/textColor</item>
     </style>
 
+    <!-- Dropdown pill on the Browse page (genre / type / sort). -->
+    <style name="BrowsePill" parent="@style/ChipFilled">
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_marginEnd">6dp</item>
+        <item name="android:checkable">true</item>
+        <item name="android:focusable">true</item>
+        <item name="chipCornerRadius">17dp</item>
+        <item name="chipStrokeWidth">0dp</item>
+        <item name="closeIconVisible">true</item>
+        <item name="closeIcon">@drawable/ic_baseline_keyboard_arrow_down_24</item>
+        <item name="closeIconTint">@color/chip_color_text</item>
+    </style>
+
+    <!-- Browse filter sheet -->
+    <style name="BrowseSheetLabel">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:paddingStart">20dp</item>
+        <item name="android:paddingEnd">20dp</item>
+        <item name="android:paddingTop">16dp</item>
+        <item name="android:paddingBottom">6dp</item>
+        <item name="android:textSize">13sp</item>
+        <item name="android:textColor">?attr/grayTextColor</item>
+    </style>
+
+    <style name="BrowseSheetChips" parent="@style/ChipParent">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:paddingStart">20dp</item>
+        <item name="android:paddingEnd">20dp</item>
+        <item name="chipSpacingVertical">2dp</item>
+        <item name="chipSpacingHorizontal">6dp</item>
+    </style>
+
+    <style name="BrowseSheetDivider">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">1dp</item>
+        <item name="android:layout_marginTop">12dp</item>
+        <item name="android:background">?attr/primaryBlackBackground</item>
+    </style>
+
+    <style name="BrowseSheetRow">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:minHeight">52dp</item>
+        <item name="android:gravity">center_vertical</item>
+        <item name="android:orientation">horizontal</item>
+        <item name="android:paddingStart">20dp</item>
+        <item name="android:paddingEnd">20dp</item>
+        <item name="android:background">?attr/selectableItemBackground</item>
+        <item name="android:focusable">true</item>
+        <item name="android:clickable">true</item>
+    </style>
+
+    <style name="BrowseSheetRowTitle">
+        <item name="android:layout_width">0dp</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_weight">1</item>
+        <item name="android:textSize">15sp</item>
+        <item name="android:textColor">?attr/textColor</item>
+    </style>
+
+    <style name="BrowseSheetRowValue">
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_marginEnd">6dp</item>
+        <item name="android:textSize">13sp</item>
+        <item name="android:textColor">?attr/grayTextColor</item>
+    </style>
+
+    <style name="BrowseSheetValueButton" parent="@style/Widget.Material3.Button.TonalButton">
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:minWidth">64dp</item>
+        <item name="backgroundTint">?attr/primaryBlackBackground</item>
+        <item name="android:textColor">?attr/textColor</item>
+        <item name="cornerRadius">6dp</item>
+    </style>
+
+    <style name="BrowseSheetSwitch">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:minHeight">48dp</item>
+        <item name="android:paddingStart">20dp</item>
+        <item name="android:paddingEnd">20dp</item>
+        <item name="android:textSize">15sp</item>
+        <item name="android:textColor">?attr/textColor</item>
+    </style>
+
     <style name="ChipParent">
         <item name="chipSpacingVertical">-5dp</item>
         <item name="chipSpacingHorizontal">5dp</item>
