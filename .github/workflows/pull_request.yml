@@ -20,7 +20,8 @@ permissions:
   contents: read
 
 jobs:
-  # The APK, every module's unit tests and the ABI check. Lint runs next to it in its own job.
+  # The APK, every module's unit tests and, when needed, the ABI check. Lint runs at the same
+  # time in its own job: both take a few minutes and neither needs the other's output.
   build-test:
     name: Build and test
     runs-on: ubuntu-latest
@@ -47,33 +48,31 @@ jobs:
         cache-read-only: false  # TEMP: measuring warm runs on this PR
 
     - name: Ensure binary compatibility
-      id: abi
       # This is to ensure that your code is backwards compatible.
       # If this fails you need to add a @Prerelease annotation to new code.
       # Upstream's master often fails this check on its own (it only runs on their pull
       # requests), so only check the ABI when this pull request changes the library.
       # Master pushes never check it: master already holds upstream's ABI as it is.
+      if: github.event_name == 'pull_request'
       run: |
-        if [ "$GITHUB_EVENT_NAME" != pull_request ] || git diff --quiet HEAD^1 HEAD -- library; then
-          echo "This run doesn't need the ABI check; skipping it."
-          # library:check depends on checkKotlinAbi, so exclude it from the next step too.
-          echo "skip=-x :library:checkKotlinAbi" >> "$GITHUB_OUTPUT"
+        if git diff --quiet HEAD^1 HEAD -- library; then
+          echo "This pull request doesn't change the library; skipping the ABI check."
         else
           ./gradlew :library:checkKotlinAbi
         fi
 
-    # `check` would also compile and unit-test the stable flavor, a second copy of the same
-    # code; only the prerelease flavor is built and tested. Every other module's checks run.
+    # Named tasks instead of `check`: in the app, `check` would also compile and unit-test the
+    # stable flavor, a second copy of the same code, and in library and shared it would run
+    # lint, which the Lint job does. allTests runs every test target of a multiplatform module.
     - name: Build and run unit tests
       run: >-
         ./gradlew
         :app:assemblePrereleaseDebug
         :app:testPrereleaseDebugUnitTest
-        :library:check
-        :shared:check
-        :desktopApp:check
-        :docs:check
-        ${{ steps.abi.outputs.skip }}
+        :library:allTests
+        :shared:allTests
+        :desktopApp:allTests
+        :docs:test
 
     - name: Upload Artifact
       uses: actions/upload-artifact@v7

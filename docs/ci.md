@@ -5,14 +5,16 @@ every push to `master`. It has two jobs that run at the same time:
 
 | Job | Runs |
 | --- | --- |
-| Build and test | `:app:assemblePrereleaseDebug`, `:app:testPrereleaseDebugUnitTest`, `check` of `library`, `shared`, `desktopApp` and `docs`, and `:library:checkKotlinAbi` when a pull request changes `library/` |
+| Build and test | `:app:assemblePrereleaseDebug`, `:app:testPrereleaseDebugUnitTest`, `allTests` of `library`, `shared` and `desktopApp`, `:docs:test`, and `:library:checkKotlinAbi` when a pull request changes `library/` |
 | Lint | `lint`: the app's prerelease debug variant (with its unit and instrumented test sources) and the Android and JVM targets of `library` and `shared` |
 
 It used to run `assemblePrereleaseDebug lint check` in one job. `check` also compiled and
 unit-tested the `stable` flavor. The two flavors share all their code (`prerelease` only adds
-launcher icons, an application id suffix and a version code), so CI compiled the app twice. Only `prerelease` is built now. A test
-that only fails in `stable` would no longer be caught; run
-`./gradlew :app:testStableDebugUnitTest` locally if you change flavor-specific code.
+launcher icons, an application id suffix and a version code), so CI compiled the app twice.
+In `library` and `shared`, `check` also runs lint, which the Lint job already does.
+
+Only `prerelease` is built now. A test that only fails in `stable` would no longer be caught;
+run `./gradlew :app:testStableDebugUnitTest` locally if you change flavor-specific code.
 
 ## Caching
 
