@@ -74,7 +74,7 @@ data class VideoState(
      */
     fun clearSortedLinksCache() = sortedLinks.clear()
 
-    private fun hasLinkErrored(link: VideoLink): Boolean {
+    fun hasLinkErrored(link: VideoLink): Boolean {
         return erroredLinks.any { it == link }
     }
 
@@ -180,26 +180,35 @@ class PlayerGeneratorViewModel : ViewModel() {
     @Volatile
     var episodeIndex: Int = 0
 
-    private var preferredSourceSelection: SourceSelectionPreference? = null
+    private var sourceSelectionHistory: SourceSelectionHistory = SourceSelectionHistory.EMPTY
     private var preferredSubtitleSelection: SubtitleSelectionPreference? = null
 
-    internal fun rememberSourceSelection(link: ExtractorLink): StoredSourceSelection? {
-        preferredSourceSelection = SourceSelectionPreference.create(
+    /** Adds the pick to this series' history and returns the history to persist. */
+    internal fun rememberSourceSelection(link: ExtractorLink): SourceSelectionHistory {
+        sourceSelectionHistory = sourceSelectionHistory.remember(
             source = link.source,
             name = link.name,
             quality = link.quality,
         )
-        return preferredSourceSelection?.toStored()
+        return sourceSelectionHistory
     }
 
-    internal fun restoreSourceSelection(stored: StoredSourceSelection?) {
-        preferredSourceSelection = SourceSelectionPreference.restore(stored)
+    /** Restores the stored history, or migrates the single selection of older versions. */
+    internal fun restoreSourceSelection(
+        history: StoredSourceSelectionHistory?,
+        legacy: StoredSourceSelection?,
+    ) {
+        sourceSelectionHistory = SourceSelectionHistory.restore(history, legacy)
     }
 
-    fun hasPreferredSourceSelection(): Boolean = preferredSourceSelection != null
+    fun hasPreferredSourceSelection(): Boolean = !sourceSelectionHistory.isEmpty()
 
-    fun findPreferredSource(links: Iterable<DisplayLink>): DisplayLink? {
-        return preferredSourceSelection?.findBest(
+    /**
+     * The link to start with: the remembered source for this series, else the highest priority
+     * usable link. Null when no link is usable.
+     */
+    fun pickStartupSource(links: Iterable<DisplayLink>): DisplayLink? {
+        return sourceSelectionHistory.pick(
             candidates = links.filter(DisplayLink::shouldUseLink),
             source = { it.link.first?.source },
             name = { it.link.first?.name },
@@ -208,17 +217,10 @@ class PlayerGeneratorViewModel : ViewModel() {
     }
 
     fun findReadyPreferredSource(links: Iterable<DisplayLink>): DisplayLink? {
-        return preferredSourceSelection?.findReady(
+        return sourceSelectionHistory.findReady(
             candidates = links.filter(DisplayLink::shouldUseLink),
             source = { it.link.first?.source },
             name = { it.link.first?.name },
-            quality = { it.link.first?.quality },
-        )
-    }
-
-    fun findPreferredQualityFallback(links: Iterable<DisplayLink>): DisplayLink? {
-        return preferredSourceSelection?.findSameQuality(
-            candidates = links.filter(DisplayLink::shouldUseLink),
             quality = { it.link.first?.quality },
         )
     }
