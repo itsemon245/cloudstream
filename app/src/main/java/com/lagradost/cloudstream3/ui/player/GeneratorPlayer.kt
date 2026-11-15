@@ -1644,7 +1644,6 @@ class GeneratorPlayer : FullScreenPlayer() {
         val links = viewModel.state.sortLinks(currentQualityProfile)
 
         val firstAvailableLink = viewModel.findPreferredSource(links)?.link
-            ?: viewModel.findPreferredQualityFallback(links)?.link
             ?: links.firstOrNull { it.shouldUseLink }?.link
         if (firstAvailableLink == null) {
             noLinksFound()

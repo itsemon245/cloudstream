@@ -62,6 +62,11 @@ internal data class StoredSourceSelection(
     val quality: Int?,
 )
 
+/** Persisted [SourceSelectionHistory], most recent selection first. */
+internal data class StoredSourceSelectionHistory(
+    val entries: List<StoredSourceSelection> = emptyList(),
+)
+
 internal class SourceSelectionPreference private constructor(
     private val sourceKey: String?,
     private val nameKey: String?,
@@ -160,6 +165,77 @@ internal class SourceSelectionPreference private constructor(
         val preferredQuality = this.quality ?: return null
         return candidates.firstOrNull { quality(it) == preferredQuality }
     }
+}
+
+/**
+ * Ordered (most recent first) list of the sources the user picked for one series, and the
+ * pure selection logic the player uses to choose the startup link of the next episode.
+ *
+ * Candidates passed to [pick]/[findPreferred]/[findReady] must already be filtered to usable
+ * links and sorted by the quality profile priority (highest first), exactly like
+ * `VideoState.sortLinks(profile).filter { it.shouldUseLink }`.
+ */
+internal class SourceSelectionHistory private constructor(
+    val entries: List<SourceSelectionPreference>,
+) {
+    companion object {
+        /** Current behaviour: only the latest selection is remembered. */
+        const val LIMIT = 1
+
+        val EMPTY = SourceSelectionHistory(emptyList())
+
+        fun restore(stored: StoredSourceSelection?): SourceSelectionHistory =
+            SourceSelectionPreference.restore(stored)
+                ?.let { SourceSelectionHistory(listOf(it)) }
+                ?: EMPTY
+
+        fun restore(stored: StoredSourceSelectionHistory?): SourceSelectionHistory =
+            SourceSelectionHistory(
+                stored?.entries.orEmpty()
+                    .mapNotNull(SourceSelectionPreference::restore)
+                    .take(LIMIT)
+            )
+    }
+
+    fun toStored(): StoredSourceSelectionHistory =
+        StoredSourceSelectionHistory(entries.map(SourceSelectionPreference::toStored))
+
+    val mostRecent: SourceSelectionPreference? get() = entries.firstOrNull()
+
+    fun isEmpty(): Boolean = entries.isEmpty()
+
+    fun remember(source: String?, name: String?, quality: Int?): SourceSelectionHistory {
+        val preference = SourceSelectionPreference.create(source, name, quality) ?: return this
+        return SourceSelectionHistory(listOf(preference))
+    }
+
+    /** The remembered source to start with, or null when normal priority should be used. */
+    fun <T> findPreferred(
+        candidates: List<T>,
+        source: (T) -> String?,
+        name: (T) -> String?,
+        quality: (T) -> Int?,
+    ): T? {
+        val preference = mostRecent ?: return null
+        return preference.findBest(candidates, source, name, quality)
+            ?: preference.findSameQuality(candidates, quality)
+    }
+
+    /** A remembered source that is good enough to start before all links finished loading. */
+    fun <T> findReady(
+        candidates: List<T>,
+        source: (T) -> String?,
+        name: (T) -> String?,
+        quality: (T) -> Int?,
+    ): T? = mostRecent?.findReady(candidates, source, name, quality)
+
+    /** Full startup choice: remembered source, otherwise the highest priority candidate. */
+    fun <T> pick(
+        candidates: List<T>,
+        source: (T) -> String?,
+        name: (T) -> String?,
+        quality: (T) -> Int?,
+    ): T? = findPreferred(candidates, source, name, quality) ?: candidates.firstOrNull()
 }
 
 internal class SubtitleSelectionPreference private constructor(

@@ -180,26 +180,27 @@ class PlayerGeneratorViewModel : ViewModel() {
     @Volatile
     var episodeIndex: Int = 0
 
-    private var preferredSourceSelection: SourceSelectionPreference? = null
+    private var sourceSelectionHistory: SourceSelectionHistory = SourceSelectionHistory.EMPTY
     private var preferredSubtitleSelection: SubtitleSelectionPreference? = null
 
     internal fun rememberSourceSelection(link: ExtractorLink): StoredSourceSelection? {
-        preferredSourceSelection = SourceSelectionPreference.create(
+        sourceSelectionHistory = sourceSelectionHistory.remember(
             source = link.source,
             name = link.name,
             quality = link.quality,
         )
-        return preferredSourceSelection?.toStored()
+        return sourceSelectionHistory.mostRecent?.toStored()
     }
 
     internal fun restoreSourceSelection(stored: StoredSourceSelection?) {
-        preferredSourceSelection = SourceSelectionPreference.restore(stored)
+        sourceSelectionHistory = SourceSelectionHistory.restore(stored)
     }
 
-    fun hasPreferredSourceSelection(): Boolean = preferredSourceSelection != null
+    fun hasPreferredSourceSelection(): Boolean = !sourceSelectionHistory.isEmpty()
 
+    /** Remembered source for this series, or null if normal priority should decide. */
     fun findPreferredSource(links: Iterable<DisplayLink>): DisplayLink? {
-        return preferredSourceSelection?.findBest(
+        return sourceSelectionHistory.findPreferred(
             candidates = links.filter(DisplayLink::shouldUseLink),
             source = { it.link.first?.source },
             name = { it.link.first?.name },
@@ -208,17 +209,10 @@ class PlayerGeneratorViewModel : ViewModel() {
     }
 
     fun findReadyPreferredSource(links: Iterable<DisplayLink>): DisplayLink? {
-        return preferredSourceSelection?.findReady(
+        return sourceSelectionHistory.findReady(
             candidates = links.filter(DisplayLink::shouldUseLink),
             source = { it.link.first?.source },
             name = { it.link.first?.name },
-            quality = { it.link.first?.quality },
-        )
-    }
-
-    fun findPreferredQualityFallback(links: Iterable<DisplayLink>): DisplayLink? {
-        return preferredSourceSelection?.findSameQuality(
-            candidates = links.filter(DisplayLink::shouldUseLink),
             quality = { it.link.first?.quality },
         )
     }
