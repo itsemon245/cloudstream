@@ -183,17 +183,24 @@ class PlayerGeneratorViewModel : ViewModel() {
     private var sourceSelectionHistory: SourceSelectionHistory = SourceSelectionHistory.EMPTY
     private var preferredSubtitleSelection: SubtitleSelectionPreference? = null
 
-    internal fun rememberSourceSelection(link: ExtractorLink): StoredSourceSelection? {
+    /** Adds the pick to this series' history and returns the history to persist. */
+    internal fun rememberSourceSelection(link: ExtractorLink): SourceSelectionHistory {
         sourceSelectionHistory = sourceSelectionHistory.remember(
             source = link.source,
             name = link.name,
             quality = link.quality,
         )
-        return sourceSelectionHistory.mostRecent?.toStored()
+        return sourceSelectionHistory
     }
 
-    internal fun restoreSourceSelection(stored: StoredSourceSelection?) {
-        sourceSelectionHistory = SourceSelectionHistory.restore(stored)
+    /** Restores the stored history, or migrates the single selection of older versions. */
+    internal fun restoreSourceSelection(
+        history: StoredSourceSelectionHistory?,
+        legacy: StoredSourceSelection?,
+    ) {
+        val restored = SourceSelectionHistory.restore(history)
+        sourceSelectionHistory =
+            if (restored.isEmpty()) SourceSelectionHistory.restore(legacy) else restored
     }
 
     fun hasPreferredSourceSelection(): Boolean = !sourceSelectionHistory.isEmpty()

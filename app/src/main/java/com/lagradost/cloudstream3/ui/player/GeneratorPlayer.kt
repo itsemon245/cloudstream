@@ -199,24 +199,29 @@ class GeneratorPlayer : FullScreenPlayer() {
                 } ?: episode
             }
 
-    private fun sourceSelectionStorageKey(meta: Any?): String? {
+    /** Storage keys (legacy single pick, history) for the series of [meta]. */
+    private fun sourceSelectionStorageKeys(meta: Any?): Pair<String, String>? {
         val episode = meta as? ResultEpisode ?: return null
-        return sourceSelectionStorageKey(
-            account = DataStoreHelper.currentAccount,
-            apiName = episode.apiName,
-            parentId = episode.parentId,
-        )
+        val account = DataStoreHelper.currentAccount
+        return sourceSelectionStorageKey(account, episode.apiName, episode.parentId) to
+                sourceSelectionHistoryStorageKey(account, episode.apiName, episode.parentId)
     }
 
     private fun rememberSourceSelection(link: ExtractorLink) {
-        val stored = viewModel.rememberSourceSelection(link) ?: return
-        val key = sourceSelectionStorageKey(currentMeta) ?: return
-        setKey(key, stored)
+        val history = viewModel.rememberSourceSelection(link)
+        val (legacyKey, historyKey) = sourceSelectionStorageKeys(currentMeta) ?: return
+        setKey(historyKey, history.toStored())
+        // Keep the single-pick key up to date for older app versions.
+        history.mostRecent?.let { setKey(legacyKey, it.toStored()) }
     }
 
     private fun restoreSourceSelection(generator: VideoGenerator<*>, index: Int) {
-        val key = sourceSelectionStorageKey(generator.videos.getOrNull(index)) ?: return
-        viewModel.restoreSourceSelection(getKey<StoredSourceSelection>(key))
+        val (legacyKey, historyKey) =
+            sourceSelectionStorageKeys(generator.videos.getOrNull(index)) ?: return
+        viewModel.restoreSourceSelection(
+            history = getKey<StoredSourceSelectionHistory>(historyKey),
+            legacy = getKey<StoredSourceSelection>(legacyKey),
+        )
     }
 
     private fun setSubtitles(subtitle: SubtitleData?, userInitiated: Boolean): Boolean {

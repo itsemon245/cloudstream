@@ -1,5 +1,7 @@
 package com.lagradost.cloudstream3.ui.player
 
+import com.fasterxml.jackson.module.kotlin.readValue
+import com.lagradost.cloudstream3.mapper
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
@@ -265,5 +267,52 @@ class SourceSelectionHistoryTest {
     @Test
     fun `the exact source is ready before all links finished loading`() {
         assertEquals(vidyAtlanta, history(vidyAtlanta).findReady(listOf(vidySeattle, vidyAtlanta)))
+    }
+
+    // ---- Pure helpers and storage ----------------------------------------------------------
+
+    @Test
+    fun `family is the first word of the name`() {
+        assertEquals("vidy", sourceFamily("Vidy [Atlanta]", "Vidy [Atlanta]"))
+        assertEquals("atlantic", sourceFamily("Atlantic [Lyra]", null))
+        assertEquals("dahmermovies", sourceFamily(dahmerIvy.name, null))
+        assertEquals("dahmermovies", sourceFamily(dahmerNorvine.name, null))
+        assertEquals("dahmermovies", sourceFamily(dahmerRemux.name, null))
+        assertEquals("vidlink", sourceFamily("Vidlink", null))
+        assertEquals("vidy", sourceFamily("4K Vidy [Atlanta]", null))
+        assertEquals("vidy", sourceFamily(null, "Vidy"))
+    }
+
+    @Test
+    fun `resolution comes from the name and a real quality field`() {
+        assertEquals(emptySet<Int>(), sourceResolutions("Vidy [Atlanta]", UNKNOWN))
+        assertEquals(emptySet<Int>(), sourceResolutions("Vidy [Atlanta]", 0))
+        assertEquals(setOf(2160), sourceResolutions("Vidy [Atlanta] 4K", UNKNOWN))
+        assertEquals(setOf(2160), sourceResolutions("Vidy [Atlanta]", 2160))
+        assertEquals(setOf(1080), sourceResolutions("Atlantic [Lyra] 1080p", 1080))
+        assertEquals(setOf(720, 1080), sourceResolutions("Atlantic [Lyra] 720p", 1080))
+        // Codec, audio and size tokens are not resolutions.
+        assertEquals(setOf(1080), sourceResolutions(dahmerIvy.name, 1080))
+        assertEquals(
+            setOf(1080),
+            sourceResolutions("Waiting.Hai.S01E03.1080p.AMZN.DDP5.1.x264[2.41GB]", UNKNOWN),
+        )
+    }
+
+    @Test
+    fun `stored history survives the json mapper used by the data store`() {
+        val stored = history(vidlink720, atlanticLyra, vidyAtlanta).toStored()
+        val json = mapper.writeValueAsString(stored)
+
+        assertEquals(stored, mapper.readValue<StoredSourceSelectionHistory>(json))
+    }
+
+    @Test
+    fun `single selection stored by older versions becomes a one entry history`() {
+        val legacy = SourceSelectionPreference.create("Vidy [Atlanta]", "Vidy [Atlanta]", UNKNOWN)
+            ?.toStored()
+        val restored = SourceSelectionHistory.restore(legacy)
+
+        assertEquals(vidySeattle, restored.pick(listOf(dahmerIvy, vidySeattle)))
     }
 }
