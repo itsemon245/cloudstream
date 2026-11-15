@@ -395,6 +395,27 @@ internal class SourceSelectionHistory private constructor(
     ): T? = findPreferred(candidates, source, name, quality) ?: candidates.firstOrNull()
 }
 
+/**
+ * The link to switch to after the current one failed during playback (`nextMirror`).
+ *
+ * [candidates] are all links in quality-profile priority order (`VideoState.sortLinks`).
+ * Returns null when there is nothing left to try.
+ */
+internal fun <T> nextLinkAfterError(
+    candidates: List<T>,
+    isCurrent: (T) -> Boolean,
+    isUsable: (T) -> Boolean,
+    hasErrored: (T) -> Boolean,
+    source: (T) -> String?,
+    name: (T) -> String?,
+    quality: (T) -> Int?,
+): T? {
+    val currentIndex = candidates.indexOfFirst(isCurrent)
+    return candidates.withIndex()
+        .firstOrNull { it.index > currentIndex && isUsable(it.value) }
+        ?.value
+}
+
 internal class SubtitleSelectionPreference private constructor(
     private val originalNameKey: String,
     private val nameSuffixKey: String?,

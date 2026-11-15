@@ -74,7 +74,7 @@ data class VideoState(
      */
     fun clearSortedLinksCache() = sortedLinks.clear()
 
-    private fun hasLinkErrored(link: VideoLink): Boolean {
+    fun hasLinkErrored(link: VideoLink): Boolean {
         return erroredLinks.any { it == link }
     }
 

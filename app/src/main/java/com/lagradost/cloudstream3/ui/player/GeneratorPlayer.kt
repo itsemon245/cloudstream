@@ -1726,11 +1726,17 @@ class GeneratorPlayer : FullScreenPlayer() {
     }
 
     private fun getNextLink(): DisplayLink? {
-        val links = viewModel.state.sortLinks(currentQualityProfile)
-        val currentIndex = links.indexOfFirst { it.link == currentSelectedLink }
-        val nextPotentialLink =
-            links.withIndex().firstOrNull { it.index > currentIndex && it.value.shouldUseLink }
-        return nextPotentialLink?.value
+        val state = viewModel.state
+        val current = currentSelectedLink
+        return nextLinkAfterError(
+            candidates = state.sortLinks(currentQualityProfile),
+            isCurrent = { it.link == current },
+            isUsable = DisplayLink::shouldUseLink,
+            hasErrored = { state.hasLinkErrored(it.link) },
+            source = { it.link.first?.source },
+            name = { it.link.first?.name },
+            quality = { it.link.first?.quality },
+        )
     }
 
     override fun hasNextMirror(): Boolean {
