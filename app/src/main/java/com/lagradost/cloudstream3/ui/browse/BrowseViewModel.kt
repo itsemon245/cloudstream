@@ -19,6 +19,7 @@ import com.lagradost.cloudstream3.ui.browse.engine.GenreMatcher
 import com.lagradost.cloudstream3.ui.browse.engine.PageRequest
 import com.lagradost.cloudstream3.ui.browse.engine.SourceStatus
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
@@ -43,7 +44,15 @@ data class BrowseUiState(
     val statuses: List<SourceStatus> = emptyList(),
     /** True when no selected source has a section for the selected genre(s). */
     val noMatchingSource: Boolean = false,
+    /**
+     * The filters and genres [items] were computed from. [filters] changes immediately on an event
+     * while [items] is recomputed in the background; [itemsUpToDate] tells the two apart.
+     */
+    val itemsFilters: ClientFilters? = null,
+    val itemsGenres: Set<String>? = null,
 ) {
+    val itemsUpToDate: Boolean get() = itemsFilters == filters && itemsGenres == genres
+
     val genreLabel: String
         get() = genres.joinToString(", ") { GenreMatcher.displayName(it) }
 }
@@ -68,7 +77,12 @@ sealed class BrowseEvent {
  * Only changes to genres, sources or types start a fetch (cached pages are reused); every other
  * filter, the sort and the in-page search only re-filter the titles already loaded.
  */
-class BrowseViewModel : ViewModel() {
+class BrowseViewModel(
+    /** Provider requests. Injectable so tests run on virtual time. */
+    private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
+    /** Index building and filtering. */
+    private val workDispatcher: CoroutineDispatcher = Dispatchers.Default,
+) : ViewModel() {
     companion object {
         /** Keep loading pages automatically until this many titles are visible. */
         const val AUTO_FILL_TARGET = 30
@@ -130,7 +144,7 @@ class BrowseViewModel : ViewModel() {
             allSources = sources.map { it.name },
         )
         viewModelScope.launch {
-            val index = withContext(Dispatchers.Default) { indexOf(sources) }
+            val index = withContext(workDispatcher) { indexOf(sources) }
             genreIndex = index
             val available = index.available.map { (key, count) ->
                 GenreOption(key, GenreMatcher.displayName(key), count)
@@ -257,7 +271,7 @@ class BrowseViewModel : ViewModel() {
         val parent = sessionJob ?: return null
         return viewModelScope.launch(parent) {
             try {
-                fetcher.fetch(requests).flowOn(Dispatchers.IO).collect { event ->
+                fetcher.fetch(requests).flowOn(ioDispatcher).collect { event ->
                     if (session !== s) return@collect
                     s.onEvent(event)
                     publishSession(s)
@@ -298,10 +312,10 @@ class BrowseViewModel : ViewModel() {
         val state = current
         filterJob?.cancel()
         filterJob = viewModelScope.launch {
-            val result = withContext(Dispatchers.Default) {
+            val result = withContext(workDispatcher) {
                 BrowseFilter.apply(pool, state.filters, state.genres).map { it.response }
             }
-            _state.value = current.copy(items = result)
+            _state.value = current.copy(items = result, itemsFilters = state.filters, itemsGenres = state.genres)
         }
     }
 }
