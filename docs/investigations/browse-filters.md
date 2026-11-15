@@ -217,26 +217,37 @@ BrowseFragment (View UI) ──events──▶ BrowseViewModel ──state (Stat
 
 ---
 
-## 6. UI structure
+## 6. UI structure (approved design)
 
-Mockup (Claude Design canvas, private to the repo owner): https://claude.ai/artifact/2aCZChzAP9CdfD7d6J3xnS
+Mockup (Claude Design canvas, private): https://claude.ai/artifact/2aCZChzAP9CdfD7d6J3xnS —
+phone row = blue accent, landscape row = teal accent; both just follow the user's accent setting
+(`?attr/colorPrimary`), nothing is hard-coded.
 
-1. **Browse page** — top bar (back, "Browse", sources button "All sources ▾"); horizontal genre chip
-   row (quick switch, counts shown in sheet); active-filter chips row (removable: *Movies*,
-   *2015–2024*, *★ 7+*, *Sort: Year*) + "Filters (3)" button; progress strip "Loading 9 of 14
-   sources…" with tappable per-source status; poster grid (`search_result_grid`) with small source
-   badge; skeleton tiles while loading; "Load more" at the end when the auto-paging cap is hit.
-2. **Filter bottom sheet** — Genre (multi, Any/All), Type (reuse type chips), Year range slider +
-   "include unknown" *(best-effort)*, Minimum rating slider + "include unrated" *(best-effort)*,
-   Quality, Dub/Sub (only if an anime source is selected), Sort (Relevance, Name, Year, Rating),
-   footer: Reset / Apply. Changing only client filters applies instantly (no spinner).
-3. **Sources sheet** — "All installed (respecting language settings)" vs "Choose…" multi-select
-   list (reused `home_select_mainpage` layout with flags), each row showing whether it has the
-   current genre ("3 sections" / "no Horror section" / "full genre support").
-4. **Detail page** — genre chips styled as links (outline + chevron), tap → Browse.
-5. **TV/landscape** — filters as a left column instead of a sheet, grid on the right, nav rail.
-
----
+1. **Search entry** (`fragment_search.xml` / `fragment_search_tv.xml`): while the query is empty, a
+   "Browse by genre" header (title + → arrow) with up to ~10 genre chips sits above the search
+   history. Genres = the ones most installed sources have a section for. Hidden when no source has
+   any genre section.
+2. **Browse page**
+   * Bar: back, "Browse", filter button (dot when sheet-only filters are active).
+   * Three pills: **Genre ▾**, **Type ▾**, **Sort ▾**. Each opens a small single-purpose picker
+     (reusing `sort_bottom_sheet` / `sort_bottom_single_choice`), the filter button opens the full
+     sheet.
+   * Hairline progress bar under the bar (fills as sources answer, hides when done).
+   * Grid: the existing `search_result_grid` items via `SearchAdapter` (posters, rating badge and
+     quality tag already honour the user's "show rating/HD" settings), placeholder tiles for
+     sources still loading, `GridLayoutManager` with the same span logic as Search.
+   * Empty state: "No source lists *X* as a category" + "Search titles for *X*" button.
+3. **Filter sheet** (phone: `BottomSheetDialog`; landscape/TV: right-side panel, 400dp, same
+   content view): Genre chips (top 7 + "+N more" expands inline, multi-select), Type, Sort,
+   Rating (Any/6+/7+/8+); row **Sources ›**; folded **More** (year from–to, quality, audio,
+   "Hide titles without year or rating"); Reset; primary button "Show N titles" (N computed
+   live from the loaded pool).
+4. **Sources** (phone: sheet; landscape: panel page with back arrow): All installed / Chosen, list
+   with check, flag, bold name, one status line per source ("3 Action sections", "Any genre",
+   "No Action section", "Failed · tap to retry"). Uses `home_select_mainpage`-style rows.
+5. **Detail page genre tags**: same dark chips (`ChipFilled`), no arrow; text tinted with a lighter
+   shade of the accent (`ColorUtils.blendARGB(colorPrimary, white, ~0.45)` for contrast), ripple on
+   press, focusable on TV. Tap → Browse(genre); long-press → Browse(genre, this source only).
 
 ## 7. Performance strategy (summary)
 
@@ -262,24 +273,55 @@ Mockup (Claude Design canvas, private to the repo owner): https://claude.ai/arti
 
 ## 9. Implementation steps (phase 2)
 
-1. `ui/browse/engine`: `GenreMatcher`, `BrowsePlanner`, `BrowseFilter`/sort, `BrowseAggregator`,
-   `BrowsePageCache` — pure Kotlin + unit tests (`app/src/test/.../ui/browse/`).
-2. `BrowseFetcher` with semaphore, cancellation, paging; tests with fake `MainAPI`s and
-   `kotlinx-coroutines-test` (ordering, cancellation, cache hits, concurrency bound).
-3. `BrowseViewModel` (MVI state + events).
-4. Layouts: `fragment_browse.xml`, `fragment_browse_tv.xml`, `browse_filter_sheet.xml`; strings.
-5. `BrowseFragment`, nav destination + Search-bar button + empty-Search genre row.
-6. `populateChips(onClick)` + Result phone/TV genre links.
-7. Optional `@Prerelease` library API (`Browse.kt`, `MainAPI.browseOptions/browse`) + planner support;
-   verify ABI dump unchanged apart from known upstream diff.
-8. Build `assemblePrereleaseDebug`, run `testPrereleaseDebugUnitTest`.
+New package `app/src/main/java/com/lagradost/cloudstream3/ui/browse/`:
+
+| File | What |
+|---|---|
+| `engine/GenreMatcher.kt` | normalisation, synonyms, section-name → genre matching (pure) |
+| `engine/BrowseModels.kt` | `BrowseQuery`, `FetchKey`, `ClientFilters`, `BrowseItem`, `SourceStatus`, `BrowseUiState` |
+| `engine/BrowsePlanner.kt` | per-provider plan: sections to fetch / skipped + reason (pure) |
+| `engine/BrowseFilter.kt` | type/year/rating/quality/audio filters + sort + "Show N" count (pure) |
+| `engine/BrowseAggregator.kt` | pool, dedupe (apiName+url, then normalised name+year), caps |
+| `engine/BrowsePageCache.kt` | LRU+TTL page cache, cleared on plugin reload |
+| `engine/BrowseFetcher.kt` | semaphore(4), 1-per-provider, rate-limit delays, timeouts, paging, cancellation; talks to providers through a small `BrowseSource` interface (implemented over `APIRepository`) so tests use fakes |
+| `BrowseViewModel.kt` | MVI: `StateFlow<BrowseUiState>` + `onEvent(BrowseEvent)` |
+| `BrowseFragment.kt` | phone + TV via `isLayout()`, pills, grid, progress, empty state |
+| `BrowseFilterSheet.kt` | filter content view, hosted in a BottomSheetDialog (phone) or side panel (landscape/TV) |
+| `BrowseSourcesSheet.kt` | source list |
+
+Changes to existing code (kept minimal, existing behaviour unchanged):
+
+* `res/navigation/mobile_navigation.xml`: `navigation_browse` (args `genre`, `apiName`, both optional).
+* `MainActivity.kt`: add `navigation_browse` to `isNavVisible` and treat it as the Search tab for
+  bottom-nav / rail highlighting.
+* `ui/search/SearchFragment.kt` + both search layouts: "Browse by genre" header above history.
+* `utils/UIHelper.populateChips`: optional `onClick` / `onLongClick` / `linkStyle` params
+  (defaults = today's behaviour) — other callers untouched.
+* `ui/result/ResultFragmentPhone.kt:989`, `ResultFragmentTv.kt:926`: pass the callbacks.
+* `DataStoreHelper`: remember last Browse type/sort/rating and chosen sources (per account,
+  like `searchPreferenceProviders`).
+* `res/values/strings.xml`: new strings only (English; translations come via Weblate).
+* `app/build.gradle.kts`: `testImplementation(libs.kotlinx.coroutines.test)` (already in the catalog).
+* **No `library` changes** in this phase → `checkKotlinAbi` unaffected. The optional
+  `@Prerelease` provider API (§4) is a follow-up.
+
+Tests (`app/src/test/java/com/lagradost/cloudstream3/ui/browse/`):
+`GenreMatcherTest` (synonyms, token vs substring, multilingual leftovers),
+`BrowsePlannerTest` (type pruning, no-section skip, sequential providers),
+`BrowseFilterTest` (each filter, unknown-value handling, sort stability, count),
+`BrowseAggregatorTest` (dedupe/merge, caps), `BrowsePageCacheTest` (TTL, LRU, invalidation),
+`BrowseFetcherTest` (progressive emission order, concurrency ≤ 4, 1 per provider, cancellation on
+new FetchKey, cache hit = no call, client filter change = no call, paging stops at cap).
+
+Order of work: engine + tests → view model → Browse page → sheets → Search entry → detail links →
+build `assemblePrereleaseDebug` + `testPrereleaseDebugUnitTest`. No emulator here, so UI is verified
+by build + unit tests only; you test on device.
 
 ## 10. Open questions for the user
 
-1. Entry point: Browse button in Search + empty-Search genre row (proposed), or replace one of the
-   5 bottom tabs (e.g. Downloads into Library)?
-2. Ship the optional `@Prerelease` provider API in this change, or heuristic only first?
-3. Country: OK to drop as a generic filter (only via country-named sections / optional API)?
-4. Default sources: "All installed (respecting language settings)" — or the Search page's saved
-   provider selection?
-5. Any interest in an opt-in, bounded "verify genres by opening titles" mode later?
+1. Pills: each opens its own small picker (proposed), or all open the full filter sheet?
+2. Optional `@Prerelease` provider API: follow-up PR (proposed) or in this change?
+3. Country: drop it entirely (proposed — no data for it); per-source language stays in the Sources list?
+4. Default sources: all installed respecting the language setting (proposed), or Search's saved selection?
+5. Remember last type/sort/rating between visits (proposed), or always start fresh?
+6. Opt-in "verify genres by opening titles" mode: later, or never?
