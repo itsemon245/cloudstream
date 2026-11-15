@@ -217,7 +217,9 @@ BrowseFragment (View UI) ──events──▶ BrowseViewModel ──state (Stat
 
 ---
 
-## 6. UI structure (see mockup)
+## 6. UI structure
+
+Mockup (Claude Design canvas, private to the repo owner): https://claude.ai/artifact/2aCZChzAP9CdfD7d6J3xnS
 
 1. **Browse page** — top bar (back, "Browse", sources button "All sources ▾"); horizontal genre chip
    row (quick switch, counts shown in sheet); active-filter chips row (removable: *Movies*,
