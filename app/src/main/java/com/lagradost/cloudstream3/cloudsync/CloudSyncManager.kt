@@ -30,9 +30,11 @@ class CloudSyncManager(private val context: Context) {
             val remoteStore = createRemoteStore(appContext, backend, account)
             var pending = localDocument
             var changedLocalRecords = 0
+            var recoveredBackupName: String? = null
 
             repeat(MAX_CONFLICT_ATTEMPTS) { attempt ->
                 val remote = remoteStore.read()
+                remote?.recoveredBackupName?.let { recoveredBackupName = it }
                 // Remote reads can take seconds. Re-snapshot immediately before applying anything
                 // so playback or library edits made while the request was in flight win normally.
                 val currentValues = localStore.readCurrentValues()
@@ -51,7 +53,7 @@ class CloudSyncManager(private val context: Context) {
 
                 try {
                     remoteStore.write(merged, remote?.version)
-                    CloudSyncSettings.recordSuccess(appContext, account)
+                    CloudSyncSettings.recordSuccess(appContext, account, recoveredBackupName)
                     return@withLock CloudSyncResult.Success(changedLocalRecords)
                 } catch (_: RemoteSyncConflictException) {
                     pending = merged

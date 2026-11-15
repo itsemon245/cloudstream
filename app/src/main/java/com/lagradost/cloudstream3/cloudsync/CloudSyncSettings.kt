@@ -32,6 +32,8 @@ data class CloudSyncStatus(
     val lastAttemptAt: Long,
     val lastSuccessAt: Long,
     val lastError: String?,
+    /** Backup name of an unreadable remote file that the last successful sync replaced. */
+    val recoveredBackupName: String? = null,
 )
 
 object CloudSyncSettings {
@@ -43,6 +45,7 @@ object CloudSyncSettings {
     private const val KEY_LAST_ATTEMPT = "cloud_sync_last_attempt"
     private const val KEY_LAST_SUCCESS = "cloud_sync_last_success"
     private const val KEY_LAST_ERROR = "cloud_sync_last_error"
+    private const val KEY_RECOVERED_BACKUP = "cloud_sync_recovered_backup"
 
     private fun preferences(context: Context) =
         PreferenceManager.getDefaultSharedPreferences(context)
@@ -65,6 +68,7 @@ object CloudSyncSettings {
             remove(accountKey(KEY_WEBDAV_USERNAME))
             remove(accountKey(KEY_WEBDAV_PASSWORD))
             remove(accountKey(KEY_LAST_ERROR))
+            remove(accountKey(KEY_RECOVERED_BACKUP))
         }
     }
 
@@ -81,6 +85,7 @@ object CloudSyncSettings {
                 EncryptedSecretStore.encrypt(config.password),
             )
             remove(accountKey(KEY_LAST_ERROR))
+            remove(accountKey(KEY_RECOVERED_BACKUP))
         }
     }
 
@@ -107,6 +112,7 @@ object CloudSyncSettings {
             remove(accountKey(KEY_WEBDAV_USERNAME))
             remove(accountKey(KEY_WEBDAV_PASSWORD))
             remove(accountKey(KEY_LAST_ERROR))
+            remove(accountKey(KEY_RECOVERED_BACKUP))
         }
     }
 
@@ -128,6 +134,7 @@ object CloudSyncSettings {
             lastAttemptAt = prefs.getLong(accountKey(KEY_LAST_ATTEMPT, account), 0L),
             lastSuccessAt = prefs.getLong(accountKey(KEY_LAST_SUCCESS, account), 0L),
             lastError = prefs.getString(accountKey(KEY_LAST_ERROR, account), null),
+            recoveredBackupName = prefs.getString(accountKey(KEY_RECOVERED_BACKUP, account), null),
         )
     }
 
@@ -137,10 +144,22 @@ object CloudSyncSettings {
         }
     }
 
-    internal fun recordSuccess(context: Context, account: String) {
+    /**
+     * [recoveredBackupName] is shown once: the next successful sync without a recovery clears it.
+     */
+    internal fun recordSuccess(
+        context: Context,
+        account: String,
+        recoveredBackupName: String? = null,
+    ) {
         preferences(context).edit {
             putLong(accountKey(KEY_LAST_SUCCESS, account), System.currentTimeMillis())
             remove(accountKey(KEY_LAST_ERROR, account))
+            if (recoveredBackupName != null) {
+                putString(accountKey(KEY_RECOVERED_BACKUP, account), recoveredBackupName)
+            } else {
+                remove(accountKey(KEY_RECOVERED_BACKUP, account))
+            }
         }
     }
 
