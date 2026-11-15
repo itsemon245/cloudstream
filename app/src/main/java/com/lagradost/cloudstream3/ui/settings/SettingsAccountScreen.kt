@@ -58,6 +58,7 @@ import com.lagradost.cloudstream3.utils.BiometricAuthenticator.startBiometricAut
 import com.lagradost.cloudstream3.utils.Coroutines.ioSafe
 import com.lagradost.cloudstream3.utils.Coroutines.runOnMainThread
 import com.lagradost.cloudstream3.utils.SingleSelectionHelper.showBottomDialogText
+import com.lagradost.cloudstream3.utils.txt
 import com.lagradost.cloudstream4.AppSettings
 import com.lagradost.cloudstream4.compose.PHONE
 import com.lagradost.cloudstream4.compose.isLayout
@@ -134,10 +135,7 @@ object SettingsAccountScreen : SearchableSettings, BiometricAuthenticator.Biomet
                     R.string.cloud_sync_google_play_services_unavailable
                 )
                 is GoogleDriveAuthorizationOutcome.Failed -> showToast(
-                    context.getString(
-                        R.string.cloud_sync_connect_failed,
-                        outcome.error.message.orEmpty(),
-                    )
+                    txt(R.string.cloud_sync_connect_failed, outcome.error.message.orEmpty())
                 )
                 is GoogleDriveAuthorizationOutcome.NeedsResolution -> showToast(
                     R.string.cloud_sync_authorization_failed
@@ -211,10 +209,7 @@ object SettingsAccountScreen : SearchableSettings, BiometricAuthenticator.Biomet
                                     )
                                     is GoogleDriveAuthorizationOutcome.Failed -> {
                                         showToast(
-                                            context.getString(
-                                                R.string.cloud_sync_connect_failed,
-                                                outcome.error.message.orEmpty(),
-                                            )
+                                            txt(R.string.cloud_sync_connect_failed, outcome.error.message.orEmpty())
                                         )
                                     }
                                 }
@@ -264,10 +259,7 @@ object SettingsAccountScreen : SearchableSettings, BiometricAuthenticator.Biomet
                                             R.string.cloud_sync_success
                                         )
                                         is CloudSyncResult.Unavailable -> showToast(
-                                            context.getString(
-                                                R.string.cloud_sync_failed,
-                                                result.message.orEmpty(),
-                                            )
+                                            txt(R.string.cloud_sync_failed, result.message.orEmpty())
                                         )
                                     }
                                 }
