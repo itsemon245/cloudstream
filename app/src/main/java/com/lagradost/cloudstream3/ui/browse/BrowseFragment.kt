@@ -1,8 +1,8 @@
 package com.lagradost.cloudstream3.ui.browse
 
+import android.app.Activity
 import android.os.Bundle
 import android.view.View
-import androidx.core.os.bundleOf
 import androidx.core.view.isVisible
 import androidx.fragment.app.viewModels
 import androidx.recyclerview.widget.GridLayoutManager
@@ -45,8 +45,14 @@ class BrowseFragment : BaseFragment<FragmentBrowseBinding>(
         const val ARG_GENRE = "genre"
         const val ARG_API = "apiName"
 
-        fun args(genre: String?, apiName: String? = null): Bundle =
-            bundleOf(ARG_GENRE to genre, ARG_API to apiName)
+        fun args(genre: String?, apiName: String? = null): Bundle = Bundle().apply {
+            putString(ARG_GENRE, genre)
+            putString(ARG_API, apiName)
+        }
+
+        /** Opens Browse for [genre]; with [apiName], only on that source. */
+        fun Activity?.openBrowse(genre: String?, apiName: String? = null) =
+            navigate(R.id.navigation_browse, args(genre, apiName))
 
         init {
             // Cached pages belong to the old plugin instances.
@@ -176,10 +182,26 @@ class BrowseFragment : BaseFragment<FragmentBrowseBinding>(
                     else -> ctx.getString(R.string.browse_no_results)
                 }
                 val searchFor = query.ifBlank { if (state.noMatchingSource) state.genreLabel else "" }
-                browseEmptySearch.isVisible = searchFor.isNotBlank()
-                browseEmptySearch.text = ctx.getString(R.string.browse_search_all_for, searchFor)
-                browseEmptySearch.setOnClickListener {
-                    activity?.navigate(R.id.navigation_search, bundleOf("search_query" to searchFor))
+                if (state.canLoadMore && !state.noMatchingSource) {
+                    // Strict filters: nothing matched yet, but more pages exist.
+                    browseEmptySearch.isVisible = true
+                    browseEmptySearch.text = ctx.getString(R.string.browse_load_more)
+                    browseEmptySearch.setOnClickListener { viewModel.onEvent(BrowseEvent.LoadMore) }
+                } else {
+                    browseEmptySearch.isVisible = searchFor.isNotBlank()
+                    browseEmptySearch.text = ctx.getString(R.string.browse_search_all_for, searchFor)
+                    browseEmptySearch.setOnClickListener {
+                        activity?.navigate(
+                            R.id.navigation_search,
+                            Bundle().apply { putString("search_query", searchFor) })
+                    }
+                }
+            }
+
+            // A grid that doesn't fill the screen can't be scrolled to load more.
+            if (idle && state.canLoadMore && state.items.isNotEmpty()) {
+                browseResults.post {
+                    if (!browseResults.canScrollVertically(1)) viewModel.onEvent(BrowseEvent.FillScreen)
                 }
             }
         }

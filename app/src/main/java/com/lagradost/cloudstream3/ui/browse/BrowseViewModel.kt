@@ -57,6 +57,8 @@ sealed class BrowseEvent {
     data class Apply(val genres: Set<String>, val filters: ClientFilters, val sources: Set<String>) : BrowseEvent()
     data class SetSources(val sources: Set<String>) : BrowseEvent()
     data object LoadMore : BrowseEvent()
+    /** Load more because the grid doesn't fill the screen; bounded like the automatic fill. */
+    data object FillScreen : BrowseEvent()
     data class Retry(val source: String) : BrowseEvent()
 }
 
@@ -164,6 +166,10 @@ class BrowseViewModel : ViewModel() {
             }
 
             BrowseEvent.LoadMore -> loadMore(auto = false)
+            BrowseEvent.FillScreen -> if (autoSteps < MAX_AUTO_STEPS) {
+                autoSteps++
+                loadMore(auto = true)
+            }
             is BrowseEvent.Retry -> {
                 session?.retry(event.source)
                 loadMore(auto = false)
