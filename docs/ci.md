@@ -48,17 +48,20 @@ reused too.
 
 Gradle's configuration cache can hold secrets, so setup-gradle only saves it when it has an
 encryption key. Without one the log says `Not saving configuration-cache state, as no
-encryption key was provided` and every run spends about 25 s configuring the build.
+encryption key was provided` and every run spends 30–40 s configuring the build before the
+first task starts. A reused entry takes about 5 s.
 
-To turn it on, create a repository secret named `GRADLE_ENCRYPTION_KEY`:
+The repository has a `GRADLE_ENCRYPTION_KEY` secret. To create or rotate it:
 
 1. Generate a key: `openssl rand -base64 16`
 2. Repository **Settings → Secrets and variables → Actions → New repository secret**, name
    `GRADLE_ENCRYPTION_KEY`, value the key. Or, with the GitHub CLI:
    `gh secret set GRADLE_ENCRYPTION_KEY --body "$(openssl rand -base64 16)"`
 
-The workflow already passes it to setup-gradle. The next `master` run saves the
-configuration cache and pull requests reuse it whenever the build scripts haven't changed.
+The workflow passes it to setup-gradle. `master` runs save the configuration cache, and pull
+requests reuse it unless they change the build scripts, `gradle.properties`, the version
+catalog or the requested tasks. A new key only makes the existing entries unreadable once;
+the next `master` run saves new ones.
 
 ## Keeping it fast
 
