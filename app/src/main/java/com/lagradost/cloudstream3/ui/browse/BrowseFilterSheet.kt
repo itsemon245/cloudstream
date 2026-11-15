@@ -88,15 +88,24 @@ class BrowseFilterSheet(
         }
         for ((key, name) in visible) {
             chip(filterGenres, name, key in genres) { checked ->
-                genres = if (checked) genres + key else (genres - key).ifEmpty { genres }
+                if (checked) genres = genres + key
+                else if (genres.size > 1) genres = genres - key
+                else {
+                    // At least one genre stays selected.
+                    bind(); return@chip
+                }
                 refresh()
             }
         }
         if (!showAllGenres && all.size > visible.size) {
-            chip(filterGenres, activity.getString(R.string.browse_more_genres, all.size - visible.size), false) {
-                showAllGenres = true
-                bind()
-            }.isCheckable = false
+            chip(filterGenres, activity.getString(R.string.browse_more_genres, all.size - visible.size), false) {}
+                .apply {
+                    isCheckable = false
+                    setOnClickListener {
+                        showAllGenres = true
+                        bind()
+                    }
+                }
         }
 
         // Type

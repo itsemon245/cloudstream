@@ -125,9 +125,11 @@ class BrowseFragment : BaseFragment<FragmentBrowseBinding>(
                 it.tag = null
                 it.setOnCloseIconClickListener { _ -> it.performClick() }
             }
-            browseGenrePill.setOnClickListener { pickGenre() }
-            browseTypePill.setOnClickListener { pickType() }
-            browseSortPill.setOnClickListener { pickSort() }
+            // Pills are checkable only to show the accent when set; a tap must not toggle them.
+            fun restorePills() = viewModel.state.value?.let { render(it, adapter) }
+            browseGenrePill.setOnClickListener { restorePills(); pickGenre() }
+            browseTypePill.setOnClickListener { restorePills(); pickType() }
+            browseSortPill.setOnClickListener { restorePills(); pickSort() }
 
             browseSearch.setOnQueryTextListener(object : androidx.appcompat.widget.SearchView.OnQueryTextListener {
                 override fun onQueryTextSubmit(query: String?): Boolean {
