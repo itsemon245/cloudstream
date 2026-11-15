@@ -30,6 +30,7 @@ jobs:
         cache-read-only: false
 
     - name: Ensure binary compatibility
+      id: abi
       # This is to ensure that your code is backwards compatible.
       # If this fails you need to add a @Prerelease annotation to new code.
       # Upstream's master often fails this check on its own (it only runs on their pull
@@ -37,12 +38,14 @@ jobs:
       run: |
         if git diff --quiet HEAD^1 HEAD -- library; then
           echo "This pull request doesn't change the library; skipping the ABI check."
+          # `check` also depends on checkKotlinAbi, so exclude it from the next step too.
+          echo "skip=-x :library:checkKotlinAbi" >> "$GITHUB_OUTPUT"
         else
           ./gradlew library:checkKotlinAbi
         fi
 
     - name: Run Gradle
-      run: ./gradlew assemblePrereleaseDebug lint check
+      run: ./gradlew assemblePrereleaseDebug lint check ${{ steps.abi.outputs.skip }}
 
     - name: Upload Artifact
       uses: actions/upload-artifact@v7
