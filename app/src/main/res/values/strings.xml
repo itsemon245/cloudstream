@@ -867,8 +867,6 @@
     <string name="browse_more">More</string>
     <string name="browse_more_summary">Year, quality, audio</string>
     <string name="browse_year">Year</string>
-    <string name="browse_year_from">From</string>
-    <string name="browse_year_to">To</string>
     <string name="browse_any">Any</string>
     <string name="browse_hide_cam">Hide CAM quality</string>
     <string name="browse_audio">Audio</string>
@@ -899,6 +897,4 @@
     <string name="browse_status_failed">failed · retried when you apply</string>
     <string name="browse_status_no_section">no %s section</string>
     <string name="browse_status_no_home">no home page</string>
-    <string name="browse_status_type">doesn\'t have the selected type</string>
-    <string name="browse_genre_only_on">%1$s on %2$s</string>
 </resources>
