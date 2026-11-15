@@ -334,6 +334,10 @@ object SettingsAccountScreen : SearchableSettings, BiometricAuthenticator.Biomet
         }
         val detail = when {
             lastError != null -> context.getString(R.string.cloud_sync_last_error, lastError)
+            recoveredBackupName != null -> context.getString(
+                R.string.cloud_sync_recovered_unreadable_file,
+                recoveredBackupName,
+            )
             lastSuccessAt > 0 -> context.getString(
                 R.string.cloud_sync_last_success,
                 DateUtils.getRelativeTimeSpanString(

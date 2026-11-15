@@ -280,4 +280,64 @@ class WebDavSyncStoreTest {
         assertFalse(client.followSslRedirects)
         assertEquals("Whole-call timeout aborts large uploads mid-body", 0, client.callTimeoutMillis)
     }
+
+    @Test
+    fun `GET answering 204 is treated as an empty file and replaced`() {
+        server.put(filePath, ByteArray(0))
+        val etag = server.files.getValue(filePath).etag
+        server.override("GET", filePath, FakeWebDavServer.Override(204, mapOf("ETag" to etag)))
+
+        syncOnce()
+
+        assertEquals(setOf(filePath), server.files.keys)
+        assertEquals(localDocument.records, remoteDocument().records)
+    }
+
+    @Test
+    fun `failed backup leaves the unreadable file untouched`() {
+        val corrupt = "{\"schemaVersion\":1,\"rec".toByteArray()
+        server.put(filePath, corrupt)
+        server.overridePrefix("PUT", "$filePath.corrupt-", FakeWebDavServer.Override(507))
+
+        val error = runCatching { syncOnce() }.exceptionOrNull()
+
+        assertTrue("Expected an IOException, got $error", error is IOException)
+        assertTrue(error!!.message.orEmpty().contains("could not be backed up"))
+        assertTrue(server.files.getValue(filePath).bytes.contentEquals(corrupt))
+    }
+
+    @Test
+    fun `valid file with a UTF-8 BOM is read without a backup`() {
+        val json = cloudSyncJson.encodeToString(localDocument).toByteArray()
+        server.put(filePath, byteArrayOf(0xEF.toByte(), 0xBB.toByte(), 0xBF.toByte()) + json)
+
+        val read = runBlocking { store.read() }
+
+        assertEquals(localDocument.records, read?.document?.records)
+        assertEquals(null, read?.recoveredBackupName)
+        assertEquals(setOf(filePath), server.files.keys)
+    }
+
+    @Test
+    fun `repeated failed repairs reuse one backup instead of uploading a copy each time`() {
+        server.put(filePath, "{\"records\":{\"x".toByteArray())
+        server.override("PUT", filePath, FakeWebDavServer.Override(423))
+
+        repeat(5) { runCatching { syncOnce() } }
+
+        val backups = server.files.keys.filter { it.startsWith("$filePath.corrupt-") }
+        assertEquals(1, backups.size)
+    }
+
+    @Test
+    fun `recovery reports the backup name so the user can be told`() {
+        server.put(filePath, "not json".toByteArray())
+
+        val read = runBlocking { store.read() }
+
+        val backupName = read?.recoveredBackupName
+        assertNotNull(backupName)
+        assertTrue(server.files.containsKey("$folder/$backupName"))
+        assertTrue(read!!.document.records.isEmpty())
+    }
 }

@@ -1,6 +1,7 @@
 package com.lagradost.cloudstream3.cloudsync
 
 import android.content.Context
+import com.lagradost.cloudstream3.mvvm.logError
 import com.lagradost.cloudstream3.network.buildDefaultClient
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -14,6 +15,7 @@ import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import okhttp3.Response
 import java.io.IOException
+import java.security.MessageDigest
 import java.util.concurrent.TimeUnit
 
 class WebDavSyncStore internal constructor(
@@ -56,7 +58,7 @@ class WebDavSyncStore internal constructor(
 
             val bytes = response.body.bytes()
             val text = bytes.toString(contentType?.charset() ?: Charsets.UTF_8)
-                .removePrefix("﻿")
+                .removePrefix("\uFEFF")
             // An interrupted upload can leave an empty file behind (Koofr is known to create the
             // file before the body arrives). There is nothing to lose, so let the next write
             // replace it.
@@ -64,12 +66,19 @@ class WebDavSyncStore internal constructor(
 
             val document = try {
                 cloudSyncJson.decodeFromString<CloudSyncDocument>(text)
-            } catch (_: IllegalArgumentException) {
+            } catch (error: IllegalArgumentException) {
                 // SerializationException is an IllegalArgumentException. The file is truncated or
                 // otherwise unreadable by every device, so keep a copy and let the caller replace
                 // it. If-Match on the following write still protects a concurrent repair.
-                backUpUnreadableFile(bytes)
-                return@use emptyDocument(response)
+                val backupName = backUpUnreadableFile(bytes)
+                logError(
+                    IOException(
+                        "WebDAV sync file is unreadable (HTTP ${response.code}, " +
+                            "${bytes.size} bytes); backed up as $backupName",
+                        error,
+                    )
+                )
+                return@use emptyDocument(response).copy(recoveredBackupName = backupName)
             }
             if (document.schemaVersion != CLOUD_SYNC_SCHEMA_VERSION) {
                 throw IOException("Unsupported sync file version ${document.schemaVersion}")
@@ -105,19 +114,29 @@ class WebDavSyncStore internal constructor(
         }
     }
 
-    private fun backUpUnreadableFile(bytes: ByteArray) {
-        val backupUrl = "$resourceUrl.corrupt-${System.currentTimeMillis()}"
+    /**
+     * Saves the unreadable bytes next to the sync file and returns the backup's file name. The
+     * name is derived from the content, so retries after a failed replacement reuse one backup
+     * instead of uploading another copy each time.
+     */
+    private fun backUpUnreadableFile(bytes: ByteArray): String {
+        val digest = MessageDigest.getInstance("SHA-256").digest(bytes)
+            .take(8)
+            .joinToString("") { "%02x".format(it) }
+        val backupUrl = "$resourceUrl.corrupt-$digest"
         val request = requestBuilder(backupUrl)
             .put(bytes.toRequestBody(OCTET_STREAM_MEDIA_TYPE))
             .header("If-None-Match", "*")
             .build()
         client.newCall(request).execute().use { response ->
-            if (!response.isSuccessful) {
+            // 412: a backup of exactly these bytes already exists from an earlier attempt.
+            if (!response.isSuccessful && response.code != 412) {
                 throw IOException(
                     "WebDAV sync file is unreadable and could not be backed up (${response.code})"
                 )
             }
         }
+        return backupUrl.substringAfterLast('/')
     }
 
     private fun emptyDocument(response: Response) =

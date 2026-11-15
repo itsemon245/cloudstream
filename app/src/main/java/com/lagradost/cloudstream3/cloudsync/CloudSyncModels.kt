@@ -28,6 +28,11 @@ data class RemoteSyncDocument(
     val document: CloudSyncDocument,
     /** Backend-specific optimistic concurrency token, such as an ETag or Drive version. */
     val version: String?,
+    /**
+     * Set when the remote file was unreadable and has been backed up under this name. The
+     * document is then empty so the next write replaces the unreadable file.
+     */
+    val recoveredBackupName: String? = null,
 )
 
 sealed interface CloudSyncResult {

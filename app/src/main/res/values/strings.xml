@@ -848,6 +848,7 @@
     <string name="cloud_sync_waiting">Waiting for first sync</string>
     <string name="cloud_sync_last_success">Last synced %1$s</string>
     <string name="cloud_sync_last_error">Waiting to retry: %1$s</string>
+    <string name="cloud_sync_recovered_unreadable_file">Recovered from an unreadable sync file; a backup was saved as %1$s</string>
     <string name="cloud_sync_connect_failed">Could not connect cloud sync: %1$s</string>
     <string name="cloud_sync_failed">Sync is unavailable and will retry: %1$s</string>
     <string name="cloud_sync_authorization_required">Open account settings and reconnect Google Drive</string>

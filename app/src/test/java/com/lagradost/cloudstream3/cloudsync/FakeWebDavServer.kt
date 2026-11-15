@@ -9,7 +9,7 @@ import java.util.concurrent.CopyOnWriteArrayList
 
 /**
  * A minimal in-process WebDAV file server, modelled on the behaviour of hosted providers such as
- * Koofr: GET/PUT/DELETE on files, strong ETags, and If-Match / If-None-Match preconditions.
+ * Koofr: GET/PUT on files, strong ETags, and If-Match / If-None-Match preconditions.
  *
  * Built on the JDK's HttpServer so the real OkHttp stack (redirects, auth header handling, body
  * decoding) runs unchanged and no extra test dependency is required.
@@ -17,11 +17,7 @@ import java.util.concurrent.CopyOnWriteArrayList
 class FakeWebDavServer : AutoCloseable {
     data class StoredFile(val bytes: ByteArray, val etag: String, val contentType: String)
 
-    data class RecordedRequest(
-        val method: String,
-        val path: String,
-        val authorization: String?,
-    )
+    data class RecordedRequest(val method: String, val path: String)
 
     /** A canned response that overrides the normal file semantics for one method + path. */
     data class Override(
@@ -33,6 +29,7 @@ class FakeWebDavServer : AutoCloseable {
     val files = ConcurrentHashMap<String, StoredFile>()
     val requests = CopyOnWriteArrayList<RecordedRequest>()
     private val overrides = ConcurrentHashMap<Pair<String, String>, Override>()
+    private val prefixOverrides = CopyOnWriteArrayList<Triple<String, String, Override>>()
     private var etagCounter = 0
 
     private val server: HttpServer =
@@ -58,6 +55,11 @@ class FakeWebDavServer : AutoCloseable {
         overrides[method to path] = response
     }
 
+    /** Like [override], for every path that starts with [pathPrefix]. */
+    fun overridePrefix(method: String, pathPrefix: String, response: Override) {
+        prefixOverrides += Triple(method, pathPrefix, response)
+    }
+
     fun text(path: String): String? = files[path]?.bytes?.toString(Charsets.UTF_8)
 
     @Synchronized
@@ -67,9 +69,12 @@ class FakeWebDavServer : AutoCloseable {
         val method = exchange.requestMethod
         val path = exchange.requestURI.path
         val body = exchange.requestBody.readBytes()
-        requests += RecordedRequest(method, path, exchange.requestHeaders.getFirst("Authorization"))
+        requests += RecordedRequest(method, path)
 
-        overrides[method to path]?.let { override ->
+        val override = overrides[method to path]
+            ?: prefixOverrides.firstOrNull { (m, prefix) -> m == method && path.startsWith(prefix) }
+                ?.third
+        override?.let { override ->
             override.headers.forEach { (name, value) -> exchange.responseHeaders.add(name, value) }
             send(exchange, override.status, override.body)
             return
@@ -97,21 +102,6 @@ class FakeWebDavServer : AutoCloseable {
                 files[path] = stored
                 exchange.responseHeaders.add("ETag", stored.etag)
                 send(exchange, if (existing == null) 201 else 204, ByteArray(0))
-            }
-
-            "DELETE" -> {
-                files.remove(path)
-                send(exchange, 204, ByteArray(0))
-            }
-
-            "COPY", "MOVE" -> synchronized(this) {
-                val source = files[path] ?: return send(exchange, 404, ByteArray(0))
-                val destination = exchange.requestHeaders.getFirst("Destination")
-                    ?.let { java.net.URI(it).path }
-                    ?: return send(exchange, 400, ByteArray(0))
-                files[destination] = source.copy(etag = nextEtag())
-                if (method == "MOVE") files.remove(path)
-                send(exchange, 201, ByteArray(0))
             }
 
             else -> send(exchange, 405, ByteArray(0))
