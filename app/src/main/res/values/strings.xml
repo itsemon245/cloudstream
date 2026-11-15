@@ -896,7 +896,7 @@
     <string name="browse_load_more">Load more</string>
     <string name="browse_status_sections">%d %s sections</string>
     <string name="browse_status_loading">loading…</string>
-    <string name="browse_status_failed">failed · select to retry</string>
+    <string name="browse_status_failed">failed · retried when you apply</string>
     <string name="browse_status_no_section">no %s section</string>
     <string name="browse_status_no_home">no home page</string>
     <string name="browse_status_type">doesn\'t have the selected type</string>

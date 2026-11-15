@@ -8,14 +8,15 @@ import androidx.fragment.app.viewModels
 import androidx.recyclerview.widget.GridLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.lagradost.cloudstream3.APIHolder.apis
-import com.lagradost.cloudstream3.MainActivity.Companion.afterPluginsLoadedEvent
 import com.lagradost.cloudstream3.R
 import com.lagradost.cloudstream3.databinding.FragmentBrowseBinding
 import com.lagradost.cloudstream3.mvvm.observe
 import com.lagradost.cloudstream3.ui.BaseFragment
 import com.lagradost.cloudstream3.ui.setRecycledViewPool
 import com.lagradost.cloudstream3.ui.browse.BrowseFilterSheet.Companion.label
-import com.lagradost.cloudstream3.ui.browse.engine.BrowsePageCache
+import com.lagradost.cloudstream3.ui.browse.engine.BrowsePaging
+import com.lagradost.cloudstream3.ui.browse.engine.BrowseSource
+import com.lagradost.cloudstream3.ui.browse.engine.GenreIndex
 import com.lagradost.cloudstream3.ui.browse.engine.BrowseSort
 import com.lagradost.cloudstream3.ui.browse.engine.GenreMatcher
 import com.lagradost.cloudstream3.ui.search.SearchAdapter
@@ -53,11 +54,6 @@ class BrowseFragment : BaseFragment<FragmentBrowseBinding>(
         /** Opens Browse for [genre]; with [apiName], only on that source. */
         fun Activity?.openBrowse(genre: String?, apiName: String? = null) =
             navigate(R.id.navigation_browse, args(genre, apiName))
-
-        init {
-            // Cached pages belong to the old plugin instances.
-            afterPluginsLoadedEvent += { forceReload -> if (forceReload) BrowsePageCache.shared.clear() }
-        }
     }
 
     private val viewModel: BrowseViewModel by viewModels()
@@ -74,19 +70,24 @@ class BrowseFragment : BaseFragment<FragmentBrowseBinding>(
     private fun initViewModel() {
         if (viewModel.isInitialized) return
         val ctx = context ?: return
+        // The sources live in the view model across rotations: never capture the Activity.
+        val appContext = ctx.applicationContext
         val apiName = arguments?.getString(ARG_API)
-        val allowed = ctx.filterProviderByPreferredMedia(hasHomePageIsRequired = false)
+        // "Browse X on this source only" from a detail page, even if the language / media
+        // settings hide that source (e.g. a title opened from Library or history).
+        val single = apiName?.let { name -> apis.firstOrNull { it.name == name } }
+        val allowed = if (single != null) listOf(single)
+        else ctx.filterProviderByPreferredMedia(hasHomePageIsRequired = false)
         val sources = allowed.map { api ->
-            ApiBrowseSource(api) { list -> ctx.filterSearchResultByFilmQuality(list) }
+            ApiBrowseSource(api) { list -> appContext.filterSearchResultByFilmQuality(list) }
         }
         val genres = arguments?.getString(ARG_GENRE)?.let { GenreMatcher.resolve(it) }.orEmpty().toSet()
         val prefs = BrowsePrefs.load()
-        val chosen = when {
-            // "Browse X on this source only" from a detail page.
-            apiName != null && apis.any { it.name == apiName } -> setOf(apiName)
-            else -> prefs.sources.toSet()
-        }
-        viewModel.init(sources, genres, prefs.toFilters(), chosen)
+        val chosen = if (single != null) setOf(single.name) else prefs.sources.toSet()
+        val indexOf: (List<BrowseSource>) -> GenreIndex =
+            if (single != null) { list -> GenreIndex.build(list) }
+            else { list -> BrowseGenreIndexCache.get(list) }
+        viewModel.init(sources, genres, prefs.toFilters(), chosen, indexOf)
     }
 
     private var lastSavedPrefs: BrowsePrefs? = null
@@ -111,10 +112,10 @@ class BrowseFragment : BaseFragment<FragmentBrowseBinding>(
             browseResults.addOnScrollListener(object : RecyclerView.OnScrollListener() {
                 override fun onScrolled(recyclerView: RecyclerView, dx: Int, dy: Int) {
                     val manager = recyclerView.layoutManager as? GridLayoutManager ?: return
-                    val last = manager.findLastVisibleItemPosition()
-                    if (last >= adapter.itemCount - manager.spanCount * 3) {
-                        viewModel.onEvent(BrowseEvent.LoadMore)
-                    }
+                    if (BrowsePaging.shouldLoadMore(
+                            dy, manager.findLastVisibleItemPosition(), adapter.itemCount, manager.spanCount
+                        )
+                    ) viewModel.onEvent(BrowseEvent.LoadMore)
                 }
             })
 

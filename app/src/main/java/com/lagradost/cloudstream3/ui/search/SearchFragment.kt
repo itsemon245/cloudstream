@@ -209,14 +209,21 @@ class SearchFragment : BaseFragment<FragmentSearchBinding>(
     private var hasBrowseGenres = false
 
     private fun bindBrowseGenres() {
-        val row = binding?.searchBrowse ?: return
         val ctx = context ?: return
-        val genres = browseGenresOf(ctx.filterProviderByPreferredMedia())
-            .take(10).map { GenreMatcher.displayName(it.first) }
-        hasBrowseGenres = genres.isNotEmpty()
-        populateChips(row.searchBrowseChips, genres, onClick = { activity?.openBrowse(it) }, tintLinks = false)
-        row.searchBrowseOpen.setOnClickListener { activity?.openBrowse(null) }
-        row.root.isVisible = hasBrowseGenres && binding?.mainSearch?.query.isNullOrBlank()
+        // Same provider list as Browse, so both share one cached genre index.
+        val apis = ctx.filterProviderByPreferredMedia(hasHomePageIsRequired = false)
+        // The genre index is cached per plugin load, but the first build parses every section
+        // name, so keep it off the main thread.
+        ioSafe {
+            val genres = browseGenresOf(apis).take(10).map { GenreMatcher.displayName(it.first) }
+            main {
+                val row = binding?.searchBrowse ?: return@main
+                hasBrowseGenres = genres.isNotEmpty()
+                populateChips(row.searchBrowseChips, genres, onClick = { activity?.openBrowse(it) }, tintLinks = false)
+                row.searchBrowseOpen.setOnClickListener { activity?.openBrowse(null) }
+                row.root.isVisible = hasBrowseGenres && binding?.mainSearch?.query.isNullOrBlank()
+            }
+        }
     }
 
     private fun reloadRepos(success: Boolean = false) = main {

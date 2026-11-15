@@ -7,12 +7,18 @@ package com.lagradost.cloudstream3.ui.browse.engine
 class BrowseSession(
     sources: List<BrowseSource>,
     val key: FetchKey,
+    index: GenreIndex = GenreIndex.EMPTY,
     maxItems: Int = 3000,
 ) {
-    val plans: List<SourcePlan> = BrowsePlanner.plan(sources, key)
+    val plans: List<SourcePlan> = BrowsePlanner.plan(sources, key, index)
     val aggregator = BrowseAggregator(maxItems)
 
-    private class SectionState(var loadedPages: Int = 0, var hasNext: Boolean = true, var inFlight: Boolean = false)
+    private class SectionState(
+        var loadedPages: Int = 0,
+        var hasNext: Boolean = true,
+        var inFlight: Boolean = false,
+        var failed: Boolean = false,
+    )
 
     private val sections = LinkedHashMap<Pair<String, Int>, SectionState>()
     private val failures = HashMap<String, String?>()
@@ -68,6 +74,7 @@ class BrowseSession(
         stepDone++
         return when (event) {
             is FetchEvent.PageLoaded -> {
+                state.failed = false
                 state.loadedPages = request.page
                 state.hasNext = event.page.hasNext && event.page.items.isNotEmpty()
                 failures.remove(request.sourceName)
@@ -84,6 +91,7 @@ class BrowseSession(
 
             is FetchEvent.PageFailed -> {
                 state.hasNext = false
+                state.failed = true
                 failures[request.sourceName] = event.error.message
                 0
             }
@@ -95,10 +103,35 @@ class BrowseSession(
         for (state in sections.values) state.inFlight = false
     }
 
-    /** Re-enables failed sections of [sourceName] (retry). */
-    fun retry(sourceName: String) {
-        failures.remove(sourceName)
-        for ((k, state) in sections) if (k.first == sourceName && state.loadedPages == 0) state.hasNext = true
+    /** Providers with at least one section whose last request failed. */
+    fun failedSources(): Set<String> =
+        sections.filterValues { it.failed && !it.inFlight }.keys.mapTo(LinkedHashSet()) { it.first }
+
+    /**
+     * Requests the failed page of every failed section of [sourceNames] again. Marks them in
+     * flight; they count towards the current step's progress.
+     */
+    fun retryRequests(sourceNames: Set<String>): List<PageRequest> {
+        val wasLoading = isLoading
+        val requests = ArrayList<PageRequest>()
+        for (plan in fetchPlans) {
+            if (plan.source.name !in sourceNames) continue
+            for (index in plan.sections.keys) {
+                val state = sections[plan.source.name to index] ?: continue
+                if (!state.failed || state.inFlight) continue
+                state.failed = false
+                state.hasNext = true
+                state.inFlight = true
+                requests += PageRequest(plan, index, state.loadedPages + 1)
+            }
+        }
+        if (requests.isNotEmpty()) {
+            if (wasLoading) stepTotal += requests.size else {
+                stepTotal = requests.size
+                stepDone = 0
+            }
+        }
+        return requests
     }
 
     fun statuses(): List<SourceStatus> = plans.map { plan ->

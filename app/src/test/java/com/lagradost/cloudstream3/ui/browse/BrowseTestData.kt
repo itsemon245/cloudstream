@@ -57,19 +57,24 @@ internal class FakeSource(
     private val failSections: Set<Int> = emptySet(),
     private val inFlightCounter: AtomicInteger? = null,
     private val maxInFlight: AtomicInteger? = null,
+    /** Fail this many calls first, then answer normally. */
+    private val failFirstCalls: Int = 0,
 ) : BrowseSource {
     val calls = AtomicInteger()
+    /** Calls that ran to completion (not cancelled). */
+    val completed = AtomicInteger()
     private val ownInFlight = AtomicInteger()
     val maxOwnInFlight = AtomicInteger()
 
     override suspend fun loadSection(sectionIndex: Int, page: Int): SectionPage {
-        calls.incrementAndGet()
+        val call = calls.incrementAndGet()
         val now = inFlightCounter?.incrementAndGet() ?: 0
         maxInFlight?.updateAndGet { maxOf(it, now) }
         maxOwnInFlight.updateAndGet { maxOf(it, ownInFlight.incrementAndGet()) }
         try {
             if (latencyMs > 0) delay(latencyMs)
-            if (sectionIndex in failSections) error("boom")
+            completed.incrementAndGet()
+            if (sectionIndex in failSections || call <= failFirstCalls) error("boom")
             val sectionPages = pages[sectionIndex].orEmpty()
             val items = sectionPages.getOrNull(page - 1).orEmpty()
             return SectionPage(items, hasNext = page < sectionPages.size)

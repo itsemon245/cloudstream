@@ -41,7 +41,7 @@ class BrowseAggregator(private val maxItems: Int = 3000) {
         for (response in responses) {
             val urlKey = sourceName to response.url
             byUrl[urlKey]?.let { existing ->
-                existing.genres += sectionGenres
+                if (!existing.genres.containsAll(sectionGenres)) existing.genres = existing.genres + sectionGenres
                 continue
             }
             val type = response.type ?: fallbackType
@@ -50,8 +50,8 @@ class BrowseAggregator(private val maxItems: Int = 3000) {
                     (year?.toString() ?: "?" + (type?.name ?: ""))
             val sameTitle = byTitle[titleKey]
             if (sameTitle != null && sameTitle.response.apiName != sourceName) {
-                sameTitle.genres += sectionGenres
-                sameTitle.alsoOn += sourceName
+                if (!sameTitle.genres.containsAll(sectionGenres)) sameTitle.genres = sameTitle.genres + sectionGenres
+                sameTitle.alsoOn = sameTitle.alsoOn + sourceName
                 byUrl[urlKey] = sameTitle
                 continue
             }
@@ -61,7 +61,7 @@ class BrowseAggregator(private val maxItems: Int = 3000) {
             val item = BrowseItem(
                 response = response,
                 type = type,
-                genres = sectionGenres.toMutableSet(),
+                genres = sectionGenres,
                 position = position,
                 providerOrder = providerOrder,
             )

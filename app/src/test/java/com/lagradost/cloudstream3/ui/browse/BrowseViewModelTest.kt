@@ -118,4 +118,57 @@ class BrowseViewModelTest {
             }
         }
     }
+
+    private fun settle(ms: Long = 300) = runBlocking { delay(ms) }
+
+    /** T1 + V2: auto-fill stops after MAX_AUTO_STEPS, and a manual load doesn't reset it. */
+    @Test fun autoFillIsBoundedAndManualLoadDoesNotResetIt() {
+        val pages = (1..10).map { p -> listOf(movie("R", "Low $p", score = 5.0)) }
+        val r = FakeSource("R", listOf("Action"), pages = mapOf(0 to pages))
+        val vm = BrowseViewModel()
+        onMain { vm.init(listOf(r), setOf("action"), ClientFilters(minRating = 7.0), emptySet()) }
+
+        waitFor(vm) { it.loadedCount == 1 + BrowseViewModel.MAX_AUTO_STEPS }
+        settle()
+        assertEquals(1 + BrowseViewModel.MAX_AUTO_STEPS, r.calls.get())
+        assertTrue(waitFor(vm) { true }.items.isEmpty())
+
+        // The user scrolls: one more page, and the screen-fill fallback stays exhausted.
+        onMain { vm.onEvent(BrowseEvent.LoadMore) }
+        waitFor(vm) { it.loadedCount == 2 + BrowseViewModel.MAX_AUTO_STEPS }
+        onMain { vm.onEvent(BrowseEvent.FillScreen) }
+        settle()
+        assertEquals(2 + BrowseViewModel.MAX_AUTO_STEPS, r.calls.get())
+    }
+
+    /** T2: switching genre mid-load cancels the old request and drops its results. */
+    @Test fun genreChangeMidLoadDropsStaleResults() {
+        val slow = FakeSource("Slow", listOf("Action"), mapOf(0 to listOf(listOf(movie("Slow", "Stale")))), latencyMs = 1_000)
+        val fast = FakeSource("Fast", listOf("Comedy"), mapOf(0 to listOf(listOf(movie("Fast", "Fresh")))))
+        val vm = BrowseViewModel()
+        onMain { vm.init(listOf(slow, fast), setOf("action"), ClientFilters(), emptySet()) }
+        runBlocking { withTimeout(5_000) { while (slow.calls.get() == 0) delay(5) } }
+        onMain { vm.onEvent(BrowseEvent.SetGenres(setOf("comedy"))) }
+
+        waitFor(vm) { it.items.map { r -> r.name } == listOf("Fresh") }
+        settle(1_300)
+        val state = waitFor(vm) { true }
+        assertEquals(listOf("Fresh"), state.items.map { it.name })
+        assertEquals(0, slow.completed.get())
+    }
+
+    /** T3: applying the sheet retries a selected source that failed. */
+    @Test fun applyRetriesFailedSources() {
+        val flaky = FakeSource("Flaky", listOf("Action"), mapOf(0 to listOf(listOf(movie("Flaky", "Back")))), failFirstCalls = 1)
+        val vm = BrowseViewModel()
+        onMain { vm.init(listOf(flaky), setOf("action"), ClientFilters(), emptySet()) }
+        var state = waitFor(vm) { s -> s.statuses.any { it is SourceStatus.Failed } }
+        assertEquals(1, flaky.calls.get())
+
+        onMain { vm.onEvent(BrowseEvent.Apply(state.genres, state.filters, emptySet())) }
+        state = waitFor(vm) { it.items.isNotEmpty() }
+        assertEquals(2, flaky.calls.get())
+        assertTrue(state.statuses.single() is SourceStatus.Loaded)
+        assertEquals("Back", state.items.single().name)
+    }
 }

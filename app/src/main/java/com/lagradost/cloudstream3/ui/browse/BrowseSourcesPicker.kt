@@ -26,9 +26,7 @@ object BrowseSourcesPicker {
         val genreLabel = genres.joinToString(", ") { GenreMatcher.displayName(it) }
 
         val labels = sources.map { source ->
-            val sections = if (source.hasMainPage) source.sectionNames.count { name ->
-                genres.any { GenreMatcher.matches(name, it) }
-            } else 0
+            val sections = if (source.hasMainPage) viewModel.genreIndex.sectionsFor(source, genres).size else 0
             val status = when {
                 !source.hasMainPage -> activity.getString(R.string.browse_status_no_home)
                 statuses[source.name] is SourceStatus.Failed -> activity.getString(R.string.browse_status_failed)

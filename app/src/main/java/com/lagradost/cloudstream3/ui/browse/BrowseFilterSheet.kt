@@ -195,11 +195,10 @@ class BrowseFilterSheet(
         filterYearFrom.text = filters.yearFrom?.toString() ?: activity.getString(R.string.browse_any)
         filterYearTo.text = filters.yearTo?.toString() ?: activity.getString(R.string.browse_any)
 
+        val index = viewModel.genreIndex
         val withGenre = viewModel.sourceList.count { source ->
             (sources.isEmpty() || source.name in sources) && source.hasMainPage &&
-                    source.sectionNames.any { section ->
-                        genres.any { GenreMatcher.matches(section, it) }
-                    }
+                    index.sectionsFor(source, genres).isNotEmpty()
         }
         val which = if (sources.isEmpty()) activity.getString(R.string.browse_all_sources)
         else activity.getString(R.string.browse_chosen_sources, sources.size)

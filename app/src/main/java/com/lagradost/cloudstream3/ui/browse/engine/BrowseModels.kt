@@ -47,20 +47,33 @@ data class FetchKey(
     val types: Set<TvType> = emptySet(),
 )
 
-/** A loaded title, possibly listed by several providers / sections. */
+/**
+ * A loaded title, possibly listed by several providers / sections.
+ *
+ * Items are updated by the aggregator on one thread while [BrowseFilter] reads them on another,
+ * so the sets are immutable and replaced as a whole (copy-on-write) — a reader always sees a
+ * complete old or new set, never a half-updated one.
+ */
 class BrowseItem(
     val response: SearchResponse,
     /** Effective type: the response's own type, or the provider's only type. */
     val type: TvType?,
-    /** Genre keys of every section this title was found in. */
-    val genres: MutableSet<String>,
+    genres: Set<String>,
     /** Index of the title within its provider's stream; used for relevance interleaving. */
     val position: Int,
     /** Order of the provider in the plan; tie-breaker for relevance. */
     val providerOrder: Int,
-    /** Other providers that list the same title. */
-    val alsoOn: MutableSet<String> = mutableSetOf(),
 ) {
+    /** Genre keys of every section this title was found in. */
+    @Volatile
+    var genres: Set<String> = genres.toSet()
+        internal set
+
+    /** Other providers that list the same title. */
+    @Volatile
+    var alsoOn: Set<String> = emptySet()
+        internal set
+
     val year: Int? get() = response.yearOrNull()
     val score: Double? get() = response.score?.toDouble(10)
     val normalizedName: String by lazy { GenreMatcher.normalize(response.name) }

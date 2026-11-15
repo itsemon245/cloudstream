@@ -42,7 +42,11 @@ sealed class SourcePlan {
 
 /** Decides, without any network access, which sections of which providers to load. */
 object BrowsePlanner {
-    fun plan(sources: List<BrowseSource>, key: FetchKey): List<SourcePlan> {
+    fun plan(
+        sources: List<BrowseSource>,
+        key: FetchKey,
+        index: GenreIndex = GenreIndex.EMPTY,
+    ): List<SourcePlan> {
         var order = 0
         return sources
             .filter { key.sources.isEmpty() || it.name in key.sources }
@@ -55,13 +59,7 @@ object BrowsePlanner {
                         SourcePlan.Skipped(source, SkipReason.TypeNotSupported)
 
                     else -> {
-                        val sections = LinkedHashMap<Int, Set<String>>()
-                        source.sectionNames.forEachIndexed { index, sectionName ->
-                            val matched = key.genres.filterTo(LinkedHashSet()) {
-                                GenreMatcher.matches(sectionName, it)
-                            }
-                            if (matched.isNotEmpty()) sections[index] = matched
-                        }
+                        val sections = index.sectionsFor(source, key.genres)
                         if (sections.isEmpty()) SourcePlan.Skipped(source, SkipReason.NoMatchingSection)
                         else SourcePlan.Fetch(source, order++, sections)
                     }
@@ -71,19 +69,8 @@ object BrowsePlanner {
 
     /**
      * Genre keys with the number of providers that have at least one matching section, most
-     * common first. Used for the genre pickers and the Search entry row.
+     * common first. Builds a throwaway [GenreIndex]; callers that repeat this should keep one.
      */
-    fun availableGenres(sources: List<BrowseSource>): List<Pair<String, Int>> {
-        val counts = LinkedHashMap<String, Int>()
-        for (source in sources) {
-            if (!source.hasMainPage) continue
-            val genres = source.sectionNames.flatMapTo(HashSet()) { GenreMatcher.canonicalGenresOf(it) }
-            for (genre in genres) counts[genre] = (counts[genre] ?: 0) + 1
-        }
-        val canonicalOrder = GenreMatcher.CANONICAL.map { it.key }
-        return counts.entries
-            .sortedWith(compareByDescending<Map.Entry<String, Int>> { it.value }
-                .thenBy { canonicalOrder.indexOf(it.key) })
-            .map { it.key to it.value }
-    }
+    fun availableGenres(sources: List<BrowseSource>): List<Pair<String, Int>> =
+        GenreIndex.build(sources).available
 }

@@ -9,12 +9,12 @@ import com.lagradost.cloudstream3.TvType
 import com.lagradost.cloudstream3.ui.browse.engine.BrowseFetcher
 import com.lagradost.cloudstream3.ui.browse.engine.BrowseFilter
 import com.lagradost.cloudstream3.ui.browse.engine.BrowsePageCache
-import com.lagradost.cloudstream3.ui.browse.engine.BrowsePlanner
 import com.lagradost.cloudstream3.ui.browse.engine.BrowseSession
 import com.lagradost.cloudstream3.ui.browse.engine.BrowseSort
 import com.lagradost.cloudstream3.ui.browse.engine.BrowseSource
 import com.lagradost.cloudstream3.ui.browse.engine.ClientFilters
 import com.lagradost.cloudstream3.ui.browse.engine.FetchKey
+import com.lagradost.cloudstream3.ui.browse.engine.GenreIndex
 import com.lagradost.cloudstream3.ui.browse.engine.GenreMatcher
 import com.lagradost.cloudstream3.ui.browse.engine.PageRequest
 import com.lagradost.cloudstream3.ui.browse.engine.SourceStatus
@@ -56,10 +56,10 @@ sealed class BrowseEvent {
     /** Everything from the filter sheet at once. */
     data class Apply(val genres: Set<String>, val filters: ClientFilters, val sources: Set<String>) : BrowseEvent()
     data class SetSources(val sources: Set<String>) : BrowseEvent()
+    /** The user scrolled near the end. */
     data object LoadMore : BrowseEvent()
     /** Load more because the grid doesn't fill the screen; bounded like the automatic fill. */
     data object FillScreen : BrowseEvent()
-    data class Retry(val source: String) : BrowseEvent()
 }
 
 /**
@@ -87,7 +87,12 @@ class BrowseViewModel : ViewModel() {
     private var filterJob: Job? = null
     private var autoSteps = 0
 
-    val isInitialized: Boolean get() = session != null
+    private var initStarted = false
+    val isInitialized: Boolean get() = initStarted
+
+    /** Pre-computed section genres of [sourceList]; [GenreIndex.EMPTY] until built. */
+    var genreIndex: GenreIndex = GenreIndex.EMPTY
+        private set
 
     /** Providers Browse can use (after the user's language / media settings). */
     val sourceList: List<BrowseSource> get() = sources
@@ -103,27 +108,41 @@ class BrowseViewModel : ViewModel() {
         return s.aggregator.snapshot().count { BrowseFilter.matches(it, withQuery, genres) }
     }
 
-    /** Called by the fragment with the providers allowed by the user's settings. */
+    /**
+     * Called once by the fragment with the providers allowed by the user's settings. The genre
+     * index is taken from [indexOf] off the main thread (the app passes a cached one).
+     */
     fun init(
         sources: List<BrowseSource>,
         genres: Set<String>,
         filters: ClientFilters,
         chosenSources: Set<String>,
+        indexOf: (List<BrowseSource>) -> GenreIndex = GenreIndex::build,
     ) {
+        if (initStarted) return
+        initStarted = true
         this.sources = sources
-        val available = BrowsePlanner.availableGenres(sources).map { (key, count) ->
-            GenreOption(key, GenreMatcher.displayName(key), count)
-        }
-        val validChosen = chosenSources.filterTo(HashSet()) { name -> sources.any { it.name == name } }
-        val startGenres = genres.ifEmpty { setOfNotNull(available.firstOrNull()?.key) }
+        // Apply the starting state now so events sent before the index is ready aren't lost.
         _state.value = current.copy(
-            genres = startGenres,
-            availableGenres = available,
+            genres = genres,
             filters = filters,
-            chosenSources = validChosen,
+            chosenSources = chosenSources.filterTo(HashSet()) { name -> sources.any { it.name == name } },
             allSources = sources.map { it.name },
         )
-        restartFetch()
+        viewModelScope.launch {
+            val index = withContext(Dispatchers.Default) { indexOf(sources) }
+            genreIndex = index
+            val available = index.available.map { (key, count) ->
+                GenreOption(key, GenreMatcher.displayName(key), count)
+            }
+            val state = current
+            _state.value = state.copy(
+                availableGenres = available,
+                genres = state.genres.ifEmpty { setOfNotNull(available.firstOrNull()?.key) },
+            )
+            // An event may already have started the same fetch (without the index); keep it.
+            if (session?.key != fetchKey(current)) restartFetch()
+        }
     }
 
     fun onEvent(event: BrowseEvent) {
@@ -157,7 +176,16 @@ class BrowseViewModel : ViewModel() {
                     chosenSources = event.sources,
                 )
                 _state.value = newState
-                if (fetchKey(newState) != session?.key) restartFetch() else refilter()
+                val s = session
+                if (s == null || fetchKey(newState) != s.key) {
+                    restartFetch()
+                } else {
+                    // Same fetch: allow a fresh auto-fill for the new filters and retry
+                    // selected sources that failed ("failed · retried when you apply").
+                    if (newState.filters != state.filters) autoSteps = 0
+                    retryFailed(s, newState.chosenSources)
+                    refilter()
+                }
             }
 
             is BrowseEvent.SetSources -> if (event.sources != state.chosenSources) {
@@ -165,14 +193,10 @@ class BrowseViewModel : ViewModel() {
                 restartFetch()
             }
 
-            BrowseEvent.LoadMore -> loadMore(auto = false)
+            BrowseEvent.LoadMore -> loadMore()
             BrowseEvent.FillScreen -> if (autoSteps < MAX_AUTO_STEPS) {
                 autoSteps++
-                loadMore(auto = true)
-            }
-            is BrowseEvent.Retry -> {
-                session?.retry(event.source)
-                loadMore(auto = false)
+                loadMore()
             }
         }
     }
@@ -184,7 +208,7 @@ class BrowseViewModel : ViewModel() {
         sessionJob?.cancel()
         stepJob = null
         autoSteps = 0
-        val newSession = BrowseSession(sources, fetchKey(current))
+        val newSession = BrowseSession(sources, fetchKey(current), genreIndex)
         session = newSession
         sessionJob = SupervisorJob(viewModelScope.coroutineContext[Job])
         val requests = newSession.firstRequests()
@@ -192,13 +216,26 @@ class BrowseViewModel : ViewModel() {
         runStep(newSession, requests)
     }
 
-    private fun loadMore(auto: Boolean) {
+    /**
+     * Loads the next page of every section. Manual and automatic loads share this; a manual load
+     * never resets the auto-fill budget, so a layout pass that reports a "scroll" can't turn
+     * auto-fill into unbounded paging. The budget resets only on a new fetch or new filters.
+     */
+    private fun loadMore() {
         val s = session ?: return
         if (stepJob?.isActive == true) return
-        if (!auto) autoSteps = 0
         val requests = s.nextRequests()
         if (requests.isEmpty()) return
         runStep(s, requests)
+    }
+
+    private fun retryFailed(s: BrowseSession, chosen: Set<String>) {
+        val failed = s.failedSources().filterTo(HashSet()) { chosen.isEmpty() || it in chosen }
+        if (failed.isEmpty()) return
+        val requests = s.retryRequests(failed)
+        if (requests.isEmpty()) return
+        publishSession(s)
+        launchFetch(s, requests) { publishSession(s) }
     }
 
     private fun runStep(s: BrowseSession, requests: List<PageRequest>) {
@@ -206,8 +243,19 @@ class BrowseViewModel : ViewModel() {
             refilter()
             return
         }
-        val parent = sessionJob ?: return
-        stepJob = viewModelScope.launch(parent) {
+        stepJob = launchFetch(s, requests) {
+            publishSession(s)
+            // Wait for the filtered list so the auto-fill decision sees the real count.
+            filterJob?.join()
+            stepJob = null
+            maybeAutoFill(s)
+        }
+    }
+
+    /** Collects [requests] into [s]; [onDone] runs only if [s] is still the current session. */
+    private fun launchFetch(s: BrowseSession, requests: List<PageRequest>, onDone: suspend () -> Unit): Job? {
+        val parent = sessionJob ?: return null
+        return viewModelScope.launch(parent) {
             try {
                 fetcher.fetch(requests).flowOn(Dispatchers.IO).collect { event ->
                     if (session !== s) return@collect
@@ -218,12 +266,7 @@ class BrowseViewModel : ViewModel() {
                 s.resetInFlight()
                 throw e
             }
-            if (session !== s) return@launch
-            publishSession(s)
-            // Wait for the filtered list so the auto-fill decision sees the real count.
-            filterJob?.join()
-            stepJob = null
-            maybeAutoFill(s)
+            if (session === s) onDone()
         }
     }
 
@@ -232,7 +275,7 @@ class BrowseViewModel : ViewModel() {
         val visible = current.items.size
         if (visible < AUTO_FILL_TARGET && s.canLoadMore && autoSteps < MAX_AUTO_STEPS) {
             autoSteps++
-            loadMore(auto = true)
+            loadMore()
         }
     }
 

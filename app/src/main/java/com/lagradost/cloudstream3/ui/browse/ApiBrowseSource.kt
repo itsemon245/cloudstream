@@ -46,10 +46,10 @@ class ApiBrowseSource(
 
 /**
  * Genres the given providers have home-page sections for, most common first, without any
- * request. Used for the "Browse by genre" row on Search.
+ * request. Uses the shared [BrowseGenreIndexCache]; call off the main thread.
  */
 fun browseGenresOf(apis: List<MainAPI>): List<Pair<String, Int>> =
-    com.lagradost.cloudstream3.ui.browse.engine.BrowsePlanner.availableGenres(apis.map { api ->
+    BrowseGenreIndexCache.get(apis.map { api ->
         object : BrowseSource {
             override val name = api.name
             override val lang = api.lang
@@ -60,4 +60,4 @@ fun browseGenresOf(apis: List<MainAPI>): List<Pair<String, Int>> =
             override suspend fun loadSection(sectionIndex: Int, page: Int): SectionPage =
                 throw UnsupportedOperationException()
         }
-    })
+    }).available

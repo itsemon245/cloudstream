@@ -20,7 +20,10 @@ object GenreMatcher {
         val aliases: List<String>,
         /** Normalised word sequences that contain an alias but do not mean this genre. */
         val excludes: List<String> = emptyList(),
-    )
+    ) {
+        internal val aliasTokens: List<List<String>> by lazy { aliases.map { tokens(it) } }
+        internal val excludeTokens: List<List<String>> by lazy { excludes.map { tokens(it) } }
+    }
 
     val CANONICAL: List<Genre> = listOf(
         Genre("action", "Action", listOf("action", "accion", "acao"), listOf("live action")),
@@ -50,6 +53,18 @@ object GenreMatcher {
 
     private val byKey = CANONICAL.associateBy { it.key }
 
+    /** Words that describe a list rather than a genre; dropped when discovering genres. */
+    private val STOP_WORDS = setOf(
+        "latest", "trending", "popular", "new", "newest", "recent", "recently", "top", "best",
+        "featured", "recommended", "updated", "update", "updates", "ongoing", "completed",
+        "upcoming", "hot", "today", "now", "this", "week", "weekly", "month", "monthly", "year",
+        "all", "more", "added", "release", "releases", "released", "airing", "episodes", "episode",
+        "movies", "movie", "films", "film", "series", "tv", "show", "shows", "anime", "cartoons",
+        "cartoon", "dubbed", "subbed", "dub", "sub", "hd", "4k", "full", "free", "watch", "online",
+        "the", "of", "and", "in", "on", "for", "to", "a", "an", "de", "la", "el", "los", "las",
+        "rated", "viewed", "most", "random", "home", "list", "collection", "collections",
+    )
+
     /** Lowercase, strip accents, keep letters/digits only, single spaces. */
     fun normalize(text: String): String {
         val decomposed = Normalizer.normalize(text, Normalizer.Form.NFD)
@@ -70,7 +85,7 @@ object GenreMatcher {
         return sb.toString().trim()
     }
 
-    private fun tokens(text: String): List<String> =
+    internal fun tokens(text: String): List<String> =
         normalize(text).split(' ').filter { it.isNotEmpty() }
 
     private fun containsSequence(haystack: List<String>, needle: List<String>): Boolean {
@@ -86,6 +101,8 @@ object GenreMatcher {
         }
         return false
     }
+
+    fun isCanonical(key: String): Boolean = key in byKey
 
     /** The genre for [key], or an ad-hoc genre whose only alias is the key itself. */
     fun genreFor(key: String): Genre = byKey[key] ?: Genre(key, key, listOf(key))
@@ -118,19 +135,40 @@ object GenreMatcher {
         }
 
     /** Whether a provider section named [sectionName] lists titles of genre [key]. */
-    fun matches(sectionName: String, key: String): Boolean {
-        val genre = genreFor(key)
-        val sectionTokens = tokens(sectionName)
+    fun matches(sectionName: String, key: String): Boolean =
+        matchesTokens(tokens(sectionName), key)
+
+    /** [matches] on an already tokenised section name (see [tokens]). */
+    fun matchesTokens(sectionTokens: List<String>, key: String): Boolean {
         if (sectionTokens.isEmpty()) return false
-        if (genre.excludes.any { containsSequence(sectionTokens, tokens(it)) }) {
+        val genre = byKey[key]
+        if (genre == null) {
+            // Ad-hoc genre (e.g. a detail page tag or a discovered genre): its own words.
+            return containsSequence(sectionTokens, key.split(' '))
+        }
+        if (genre.excludeTokens.any { containsSequence(sectionTokens, it) }) {
             // Still a match if the alias also appears outside the excluded phrase,
             // e.g. "Live Action & Action" — rare enough to ignore.
             return false
         }
-        return genre.aliases.any { containsSequence(sectionTokens, tokens(it)) }
+        return genre.aliasTokens.any { containsSequence(sectionTokens, it) }
     }
 
     /** All canonical genre keys a section name matches. */
-    fun canonicalGenresOf(sectionName: String): Set<String> =
-        CANONICAL.filter { matches(sectionName, it.key) }.mapTo(LinkedHashSet()) { it.key }
+    fun canonicalGenresOf(sectionName: String): Set<String> = canonicalGenresOfTokens(tokens(sectionName))
+
+    fun canonicalGenresOfTokens(sectionTokens: List<String>): Set<String> =
+        CANONICAL.filter { matchesTokens(sectionTokens, it.key) }.mapTo(LinkedHashSet()) { it.key }
+
+    /**
+     * A genre-like key for a section that matches no canonical genre, e.g. "Superhero Movies" ->
+     * "superhero", "Martial Arts" -> "martial arts". Null for list-style names such as
+     * "Latest Movies" or "Trending Now", and for anything longer than three words.
+     */
+    fun discoveredKeyOf(sectionTokens: List<String>): String? {
+        if (canonicalGenresOfTokens(sectionTokens).isNotEmpty()) return null
+        val words = sectionTokens.filter { it !in STOP_WORDS && it.any { c -> c.isLetter() } && it.length > 1 }
+        if (words.isEmpty() || words.size > 3) return null
+        return words.joinToString(" ")
+    }
 }
