@@ -171,22 +171,34 @@ BrowseFragment (View UI) ──events──▶ BrowseViewModel ──state (Stat
 * **`BrowsePlanner`** (pure): for each provider decide sources:
   `BrowseApi(request)` if `browseOptions` covers the genre → else `Sections(indices)` from
   `GenreMatcher.match(mainPage names, genres)` → else `Skipped(reason)`. Type filter prunes providers
-  via `supportedTypes` and prefers type-matching sections. The section→genre index is computed once
-  per plugin load (string work only) and cached.
+  via `supportedTypes`. Section genres come from the `GenreIndex` (below), so planning does no
+  string parsing.
+* **`GenreIndex`** (implemented): genres of every provider section, built once off the main thread
+  and cached in `BrowseGenreIndexCache` until plugins reload (or the provider set changes). Shared
+  by Search's genre row, the planner, the filter sheet and the source picker.
 * **`GenreMatcher`** (pure): normalisation (lowercase, diacritics, `&`/`/`/`,` splits, stop words
   "movies, series, tv, shows, top, latest, new, popular, best"), synonym table (sci-fi/science
   fiction, rom-com/romance+comedy, kdrama/korean drama, …). Genre list in the UI = canonical genres
-  ∪ genres discovered from section names ∪ `browseOptions.genres`, with per-genre source counts.
+  ∪ genres discovered from section names, with per-genre source counts. A discovered genre is the
+  section name minus list words ("Latest", "Trending", "Popular", "New", "Recent", "Top",
+  "Movies", "Series", …), at most three words, and is listed only when **at least two sources**
+  share it (e.g. "Superhero Movies" + "Superhero" → *Superhero*). Discovered and ad-hoc genres
+  (from detail page tags) match sections by their words. (`browseOptions.genres` joins this list
+  once the optional provider API lands.)
 * **`BrowseFetcher`**:
   * global `Semaphore(4)` for concurrent provider calls (Search today fires all providers at once);
     at most 1 in-flight call per provider, honouring `sequentialMainPage*` delays via
     `waitForHomeDelay()`; timeouts via existing `APIRepository` logic.
   * first page of every source in parallel (bounded), results emitted as they arrive
     (`SourceEvent.Loaded/Failed/Skipped`) → **progressive grid**.
-  * paging: when the grid nears its end, request the next page from sources with `hasNext`
-    (round-robin, 1 page per source per step). Stop automatically once ~60 matching items are
-    visible beyond the viewport, so strict client filters can't trigger unbounded fetching
-    (cap: 5 pages per source per scroll step, then "Load more" button).
+  * paging (implemented): a real downward scroll near the end requests the next page of every
+    section that has one (interleaved by provider). While fewer than 30 titles are visible, up to
+    **3** extra steps load automatically (also when the grid is too short to scroll); after that
+    only the user's scroll or the "Load more" button continues. A manual load never resets that
+    budget (layout passes report `onScrolled(0, 0)`, which is ignored); only a new fetch or new
+    filters reset it.
+  * failures: a source whose request failed shows "failed · retried when you apply"; applying the
+    filter sheet re-requests the failed pages of the selected sources.
   * **cache**: in-memory LRU of `(provider, sourceId, page) → items, hasNext`, TTL 10 min, ~200
     entries; cleared on `afterPluginsLoadedEvent(forceReload)`. Re-opening Browse, toggling a genre
     off and on, or going back from the detail page doesn't refetch.
@@ -196,7 +208,10 @@ BrowseFragment (View UI) ──events──▶ BrowseViewModel ──state (Stat
     SearchViewModel.kt:67).
 * **`BrowseAggregator`**: keeps a pool (cap 3 000 items) of `BrowseItem(response, sources, genres,
   arrivalIndex)`; dedupes by `apiName+url`, and merges cross-provider duplicates by normalised
-  `name + year` (merge keeps the first poster and lists other sources).
+  `name + year` (merge keeps the first poster and lists other sources). Items are updated on the
+  main thread while filtering runs on `Dispatchers.Default`, so `genres`/`alsoOn` are immutable
+  sets replaced copy-on-write (a stress test showed the earlier mutable set losing a
+  "match all genres" result ~49k times in 4M reads).
 * **`BrowseFilter`** (pure, O(n), plus O(n log n) sort): applied on `Dispatchers.Default`, results
   posted with `distinctUntilChanged`; recomputation is conflated (only the latest pool/filter
   combination is computed). UI uses `ListAdapter`/DiffUtil, so new arrivals only insert rows.
@@ -245,9 +260,10 @@ phone row = blue accent, landscape row = teal accent; both just follow the user'
    Rating (Any/6+/7+/8+); row **Sources ›**; folded **More** (year from–to, quality, audio,
    "Hide titles without year or rating"); Reset; primary button "Show N titles" (N computed
    live from the loaded pool).
-4. **Sources** (phone: sheet; landscape: panel page with back arrow): All installed / Chosen, list
-   with check, flag, bold name, one status line per source ("3 Action sections", "Any genre",
-   "No Action section", "Failed · tap to retry"). Uses `home_select_mainpage`-style rows.
+4. **Sources**: the app's multi-select list dialog; each row is flag, name and a status
+   ("3 Action sections", "no Action section", "failed · retried when you apply"). Selecting every
+   source means "all installed" (includes sources installed later). Long-press on a detail page
+   tag browses only that title's source, even if language/media settings hide it.
 5. **Detail page genre tags**: same dark chips (`ChipFilled`), no arrow; text tinted with a lighter
    shade of the accent (`ColorUtils.blendARGB(colorPrimary, white, ~0.45)` for contrast), ripple on
    press, focusable on TV. Tap → Browse(genre); long-press → Browse(genre, this source only).
@@ -280,17 +296,20 @@ New package `app/src/main/java/com/lagradost/cloudstream3/ui/browse/`:
 
 | File | What |
 |---|---|
-| `engine/GenreMatcher.kt` | normalisation, synonyms, section-name → genre matching (pure) |
+| `engine/GenreMatcher.kt` | normalisation, synonyms, section-name → genre matching, discovered genre keys (pure) |
+| `engine/GenreIndex.kt` | per-section genres + available genre list, built once; `BrowseGenreIndexCache.kt` caches it per plugin load |
+| `engine/BrowseSession.kt` | per-fetch bookkeeping: pages per section, failures/retries, statuses, progress |
+| `engine/BrowsePaging.kt` | when a scroll should load more (ignores layout passes) |
 | `engine/BrowseModels.kt` | `BrowseQuery`, `FetchKey`, `ClientFilters`, `BrowseItem`, `SourceStatus`, `BrowseUiState` |
 | `engine/BrowsePlanner.kt` | per-provider plan: sections to fetch / skipped + reason (pure) |
 | `engine/BrowseFilter.kt` | type/year/rating/quality/audio filters + sort + "Show N" count (pure) |
 | `engine/BrowseAggregator.kt` | pool, dedupe (apiName+url, then normalised name+year), caps |
 | `engine/BrowsePageCache.kt` | LRU+TTL page cache, cleared on plugin reload |
 | `engine/BrowseFetcher.kt` | semaphore(4), 1-per-provider, rate-limit delays, timeouts, paging, cancellation; talks to providers through a small `BrowseSource` interface (implemented over `APIRepository`) so tests use fakes |
-| `BrowseViewModel.kt` | MVI: `StateFlow<BrowseUiState>` + `onEvent(BrowseEvent)` |
+| `BrowseViewModel.kt` | MVI: `LiveData<BrowseUiState>` (like the rest of the app) + `onEvent(BrowseEvent)` |
 | `BrowseFragment.kt` | phone + TV via `isLayout()`, pills, grid, progress, empty state |
 | `BrowseFilterSheet.kt` | filter content view, hosted in a BottomSheetDialog (phone) or side panel (landscape/TV) |
-| `BrowseSourcesSheet.kt` | source list |
+| `BrowseSourcesPicker.kt` | source list (reuses the multi-select dialog) |
 
 Changes to existing code (kept minimal, existing behaviour unchanged):
 
