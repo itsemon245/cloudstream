@@ -388,3 +388,25 @@ Changes in `claude/browse-followups`, from testing on a phone:
    (Bollywood, Hollywood, Indian, South Indian, Tamil, Telugu, Korean, …) are known keys shown in
    their own **Platform** and **Region** groups in the sheet; Search's genre row lists genres only.
    Everything stays part of the cached `GenreIndex`.
+
+## 12. Poster fit setting (all portrait poster slots)
+
+* **Bug:** wide covers flipped between fitted and cropped as you scrolled. Cause: the app's image
+  loader crossfades results (200 ms), but Coil skips the crossfade for memory-cache hits. A
+  crossfaded result keeps the scale captured when the request was built (centre-crop) and, with a
+  size-less placeholder, reports no intrinsic size, so switching the view to fit-centre
+  afterwards had no effect — disk/network results were cropped, memory hits fitted.
+  (Hardware bitmaps were not the cause: Coil rejects a cached hardware bitmap for a request with
+  `allowHardware(false)` and decodes a software one.)
+* **Fix:** one loader, `ui/poster/PosterLoader`, used by `SearchResultBuilder.bind` for every
+  portrait slot. Its Coil target decides fit/crop in the drawable setter from the drawable's size
+  only (placeholder, result, error, cache hit or not; recycled views are reset). With "Fit whole
+  image" posters don't crossfade. The blurred fill is decoration only (solid fill when pixels
+  can't be read).
+* **Setting** "Landscape images in posters" (UI settings, Compose and XML screens; key
+  `poster_fit_mode_key`): *Fit whole image* (default) or *Fill poster* (centre-crop). Read once
+  and refreshed through a SharedPreferences listener, so it applies on the next bind.
+* **Screens:** Search results, quick search, Home rows and the expanded Home list (portrait rows;
+  rows a provider marks `horizontalImages` keep a plain crop), Library, Browse, and the
+  recommendations on the phone and TV detail pages — phone and TV layouts alike. Home's large
+  header preview shows a landscape backdrop and is unchanged.

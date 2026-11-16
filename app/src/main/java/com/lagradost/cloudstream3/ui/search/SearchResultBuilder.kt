@@ -25,6 +25,7 @@ import com.lagradost.cloudstream3.utils.AppContextUtils.getNameFull
 import com.lagradost.cloudstream3.utils.AppContextUtils.getShortSeasonText
 import com.lagradost.cloudstream3.utils.DataStoreHelper
 import com.lagradost.cloudstream3.utils.DataStoreHelper.fixVisual
+import com.lagradost.cloudstream3.ui.poster.PosterLoader
 import com.lagradost.cloudstream3.utils.ImageLoader.loadImage
 import com.lagradost.cloudstream3.utils.SubtitleHelper
 import com.lagradost.cloudstream3.utils.UIHelper.colorFromAttribute
@@ -51,8 +52,12 @@ object SearchResultBuilder {
         nextFocusUp: Int? = null,
         nextFocusDown: Int? = null,
         colorCallback: ((Palette) -> Unit)? = null,
-        /** Replaces the default poster loading (Browse uses an aspect-aware loader). */
-        loadPoster: ((ImageView, SearchResponse) -> Unit)? = null,
+        /**
+         * True for landscape slots (Home rows a provider marks as horizontal images): those keep a
+         * plain centre-crop. Portrait slots go through [PosterLoader], which applies the
+         * "landscape images in posters" setting the same way on every screen.
+         */
+        isHorizontal: Boolean = false,
     ) {
         val cardView: ImageView = itemView.findViewById(R.id.imageView)
         val cardText: TextView? = itemView.findViewById(R.id.imageText)
@@ -134,13 +139,17 @@ object SearchResultBuilder {
         cardText?.text = card.name
         cardText?.isVisible = showTitle
         cardView.isVisible = true
-        if (loadPoster != null) {
-            loadPoster(cardView, card)
-        } else if (!card.posterUrl.isNullOrEmpty()) {
-            cardView.loadImage(card.posterUrl, card.posterHeaders) {
-                error { getImageFromDrawable(itemView.context, R.drawable.default_cover) }
-            }
-        } else cardView.loadImage(R.drawable.default_cover)
+        if (!isHorizontal) {
+            PosterLoader.load(cardView, card)
+        } else {
+            // Views are recycled through shared pools: undo a fitted poster's state.
+            PosterLoader.resetToCrop(cardView)
+            if (!card.posterUrl.isNullOrEmpty()) {
+                cardView.loadImage(card.posterUrl, card.posterHeaders) {
+                    error { getImageFromDrawable(itemView.context, R.drawable.default_cover) }
+                }
+            } else cardView.loadImage(R.drawable.default_cover)
+        }
 
         fun click(view: View?) {
             clickCallback.invoke(

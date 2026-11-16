@@ -114,7 +114,7 @@ class BrowseFragment : BaseFragment<FragmentBrowseBinding>(
 
     override fun onBindingCreated(binding: FragmentBrowseBinding) {
         initViewModel()
-        val adapter = SearchAdapter(binding.browseResults, loadPoster = BrowsePosters::load) { callback ->
+        val adapter = SearchAdapter(binding.browseResults) { callback ->
             SearchHelper.handleSearchClickCallback(callback)
         }
         binding.apply {

@@ -45,6 +45,15 @@
             app:min="0"
             app:seekBarIncrement="1"
             app:showSeekBarValue="true" />
+
+        <ListPreference
+            android:defaultValue="FitWhole"
+            android:entries="@array/poster_fit_mode_names"
+            android:entryValues="@array/poster_fit_mode_values"
+            android:icon="@drawable/baseline_grid_view_24"
+            android:key="@string/poster_fit_mode_key"
+            android:title="@string/poster_fit_mode_settings"
+            app:useSimpleSummaryProvider="true" />
     </PreferenceCategory>
 
     <PreferenceCategory android:title="@string/pref_category_ui_features">
