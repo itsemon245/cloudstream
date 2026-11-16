@@ -23,6 +23,9 @@ object BrowseFilter {
         queryTokens: List<String> = GenreMatcher.normalize(filters.query)
             .split(' ').filter { it.isNotEmpty() },
     ): Boolean {
+        if (item.excluded) return false
+        item.type?.let { if (it in filters.excludedTypes) return false }
+
         if (filters.types.isNotEmpty()) {
             val type = item.type
             // Unknown type: keep, the provider was already checked to support a selected type.

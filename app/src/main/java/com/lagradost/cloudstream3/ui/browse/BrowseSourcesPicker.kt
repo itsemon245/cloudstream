@@ -26,11 +26,16 @@ object BrowseSourcesPicker {
         val genreLabel = genres.joinToString(", ") { GenreMatcher.displayName(it) }
 
         val labels = sources.map { source ->
-            val sections = if (source.hasMainPage) viewModel.genreIndex.sectionsFor(source, genres).size else 0
+            val sections = when {
+                !source.hasMainPage -> 0
+                genres.isEmpty() -> source.sectionNames.size
+                else -> viewModel.genreIndex.sectionsFor(source, genres).size
+            }
             val status = when {
                 !source.hasMainPage -> activity.getString(R.string.browse_status_no_home)
                 statuses[source.name] is SourceStatus.Failed -> activity.getString(R.string.browse_status_failed)
                 statuses[source.name] is SourceStatus.Loading -> activity.getString(R.string.browse_status_loading)
+                genres.isEmpty() -> activity.getString(R.string.browse_status_home_sections, sections)
                 sections == 0 -> activity.getString(R.string.browse_status_no_section, genreLabel)
                 else -> activity.getString(R.string.browse_status_sections, sections, genreLabel)
             }

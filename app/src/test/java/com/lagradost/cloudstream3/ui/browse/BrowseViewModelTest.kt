@@ -201,4 +201,31 @@ class BrowseViewModelTest {
         assertTrue(state.statuses.single() is SourceStatus.Loaded)
         assertEquals(listOf("Back"), state.items.map { it.name })
     }
+
+    /** Opening Browse without a genre browses any genre: every home section, nothing preselected. */
+    @Test fun anyGenreIsTheDefault() = runTest(dispatcher) {
+        val vm = newViewModel()
+        vm.init(listOf(a, b), emptySet(), ClientFilters(), emptySet())
+        val state = settled(vm)
+        assertTrue(state.genres.isEmpty())
+        // A: Trending (empty), Action Movies (3), Horror (1); B: Latest (empty).
+        assertEquals(setOf("Alpha", "Bravo", "Charlie", "Scream"), state.items.map { it.name }.toSet())
+        assertEquals(3, a.calls.get())
+        assertEquals(1, b.calls.get())
+    }
+
+    /** Excluding a genre in the sheet hides titles its sections list, even under "any genre". */
+    @Test fun applyWithExcludedGenreHidesItsTitles() = runTest(dispatcher) {
+        val vm = newViewModel()
+        vm.init(listOf(a), emptySet(), ClientFilters(), emptySet())
+        var state = settled(vm)
+        assertTrue("Scream" in state.items.map { it.name })
+
+        vm.onEvent(BrowseEvent.Apply(emptySet(), state.filters, emptySet(), excludedGenres = setOf("horror")))
+        state = settled(vm)
+        assertEquals(setOf("horror"), state.excludedGenres)
+        assertEquals(setOf("Alpha", "Bravo", "Charlie"), state.items.map { it.name }.toSet())
+        // Pages came from the cache: excluding never refetches what was loaded.
+        assertEquals(3, a.calls.get())
+    }
 }

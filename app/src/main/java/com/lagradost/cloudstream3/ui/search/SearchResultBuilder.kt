@@ -50,7 +50,9 @@ object SearchResultBuilder {
         itemView: View,
         nextFocusUp: Int? = null,
         nextFocusDown: Int? = null,
-        colorCallback: ((Palette) -> Unit)? = null
+        colorCallback: ((Palette) -> Unit)? = null,
+        /** Replaces the default poster loading (Browse uses an aspect-aware loader). */
+        loadPoster: ((ImageView, SearchResponse) -> Unit)? = null,
     ) {
         val cardView: ImageView = itemView.findViewById(R.id.imageView)
         val cardText: TextView? = itemView.findViewById(R.id.imageText)
@@ -132,7 +134,9 @@ object SearchResultBuilder {
         cardText?.text = card.name
         cardText?.isVisible = showTitle
         cardView.isVisible = true
-        if (!card.posterUrl.isNullOrEmpty()) {
+        if (loadPoster != null) {
+            loadPoster(cardView, card)
+        } else if (!card.posterUrl.isNullOrEmpty()) {
             cardView.loadImage(card.posterUrl, card.posterHeaders) {
                 error { getImageFromDrawable(itemView.context, R.drawable.default_cover) }
             }

@@ -27,10 +27,18 @@ import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-data class GenreOption(val key: String, val name: String, val sources: Int)
+data class GenreOption(
+    val key: String,
+    val name: String,
+    val sources: Int,
+    val category: GenreMatcher.Category = GenreMatcher.Category.Genre,
+)
 
 data class BrowseUiState(
+    /** Genres to include; empty = any genre (the default). */
     val genres: Set<String> = emptySet(),
+    /** Genres to leave out (section level, best-effort; see FetchKey.excludedGenres). */
+    val excludedGenres: Set<String> = emptySet(),
     val availableGenres: List<GenreOption> = emptyList(),
     val filters: ClientFilters = ClientFilters(),
     /** Empty = all installed. */
@@ -53,6 +61,7 @@ data class BrowseUiState(
 ) {
     val itemsUpToDate: Boolean get() = itemsFilters == filters && itemsGenres == genres
 
+    /** All selected genres, for texts such as "no Action section". */
     val genreLabel: String
         get() = genres.joinToString(", ") { GenreMatcher.displayName(it) }
 }
@@ -63,7 +72,12 @@ sealed class BrowseEvent {
     data class SetSort(val sort: BrowseSort) : BrowseEvent()
     data class SetQuery(val query: String) : BrowseEvent()
     /** Everything from the filter sheet at once. */
-    data class Apply(val genres: Set<String>, val filters: ClientFilters, val sources: Set<String>) : BrowseEvent()
+    data class Apply(
+        val genres: Set<String>,
+        val filters: ClientFilters,
+        val sources: Set<String>,
+        val excludedGenres: Set<String> = emptySet(),
+    ) : BrowseEvent()
     data class SetSources(val sources: Set<String>) : BrowseEvent()
     /** The user scrolled near the end. */
     data object LoadMore : BrowseEvent()
@@ -115,9 +129,14 @@ class BrowseViewModel(
      * How many loaded titles the given sheet settings would show, or null when they need a new
      * fetch (different genres, sources or types), in which case the count is not known yet.
      */
-    fun previewCount(genres: Set<String>, filters: ClientFilters, chosenSources: Set<String>): Int? {
+    fun previewCount(
+        genres: Set<String>,
+        filters: ClientFilters,
+        chosenSources: Set<String>,
+        excludedGenres: Set<String> = emptySet(),
+    ): Int? {
         val s = session ?: return null
-        if (FetchKey(genres, chosenSources, filters.types) != s.key) return null
+        if (fetchKey(genres, chosenSources, filters, excludedGenres) != s.key) return null
         val withQuery = filters.copy(query = current.filters.query)
         return s.aggregator.snapshot().count { BrowseFilter.matches(it, withQuery, genres) }
     }
@@ -147,13 +166,10 @@ class BrowseViewModel(
             val index = withContext(workDispatcher) { indexOf(sources) }
             genreIndex = index
             val available = index.available.map { (key, count) ->
-                GenreOption(key, GenreMatcher.displayName(key), count)
+                GenreOption(key, GenreMatcher.displayName(key), count, GenreMatcher.categoryOf(key))
             }
-            val state = current
-            _state.value = state.copy(
-                availableGenres = available,
-                genres = state.genres.ifEmpty { setOfNotNull(available.firstOrNull()?.key) },
-            )
+            // No genre means any genre: that is the default, not "pick the most common one".
+            _state.value = current.copy(availableGenres = available)
             // An event may already have started the same fetch (without the index); keep it.
             if (session?.key != fetchKey(current)) restartFetch()
         }
@@ -162,14 +178,20 @@ class BrowseViewModel(
     fun onEvent(event: BrowseEvent) {
         val state = current
         when (event) {
-            is BrowseEvent.SetGenres -> if (event.genres.isNotEmpty() && event.genres != state.genres) {
-                _state.value = state.copy(genres = event.genres)
+            is BrowseEvent.SetGenres -> if (event.genres != state.genres) {
+                _state.value = state.copy(genres = event.genres, excludedGenres = state.excludedGenres - event.genres)
                 restartFetch()
             }
 
             is BrowseEvent.SetTypes -> {
-                _state.value = state.copy(filters = state.filters.copy(types = event.types))
-                if (event.types != state.filters.types) restartFetch() else refilter()
+                val newState = state.copy(
+                    filters = state.filters.copy(
+                        types = event.types,
+                        excludedTypes = state.filters.excludedTypes - event.types,
+                    )
+                )
+                _state.value = newState
+                if (fetchKey(newState) != session?.key) restartFetch() else refilter()
             }
 
             is BrowseEvent.SetSort -> {
@@ -183,9 +205,9 @@ class BrowseViewModel(
             }
 
             is BrowseEvent.Apply -> {
-                val genres = event.genres.ifEmpty { state.genres }
                 val newState = state.copy(
-                    genres = genres,
+                    genres = event.genres,
+                    excludedGenres = event.excludedGenres - event.genres,
                     filters = event.filters.copy(query = state.filters.query),
                     chosenSources = event.sources,
                 )
@@ -216,7 +238,14 @@ class BrowseViewModel(
     }
 
     private fun fetchKey(state: BrowseUiState) =
-        FetchKey(state.genres, state.chosenSources, state.filters.types)
+        fetchKey(state.genres, state.chosenSources, state.filters, state.excludedGenres)
+
+    private fun fetchKey(
+        genres: Set<String>,
+        sources: Set<String>,
+        filters: ClientFilters,
+        excludedGenres: Set<String>,
+    ) = FetchKey(genres, sources, filters.types, excludedGenres, filters.excludedTypes)
 
     private fun restartFetch() {
         sessionJob?.cancel()

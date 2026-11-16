@@ -857,6 +857,15 @@
     <!-- Browse -->
     <string name="browse">Browse</string>
     <string name="browse_by_genre">Browse by genre</string>
+    <string name="browse_any_genre">Any genre</string>
+    <string name="browse_regions">Region</string>
+    <string name="browse_platforms">Platform</string>
+    <string name="browse_tristate_hint">Tap once to include, again to exclude</string>
+    <string name="browse_excluded_chip">− %s</string>
+    <string name="browse_excluded_desc">Excluded: %s</string>
+    <string name="browse_pill_more">%1$s +%2$d</string>
+    <string name="browse_pill_not">Not %s</string>
+    <string name="browse_sources_summary_any">%1$s · %2$d with a home page</string>
     <string name="browse_search_hint">Search in Browse…</string>
     <string name="browse_filters">Filters</string>
     <string name="browse_reset">Reset</string>
@@ -890,10 +899,12 @@
     <string name="browse_show_titles">Show %d titles</string>
     <string name="browse_no_source_for_genre">No source lists %s as a category</string>
     <string name="browse_no_results">No loaded titles match these filters</string>
+    <string name="browse_no_home_sources">None of the selected sources has a home page to browse</string>
     <string name="browse_no_genres">None of your sources list genres on their home page</string>
     <string name="browse_search_all_for">Search all sources for “%s”</string>
     <string name="browse_load_more">Load more</string>
     <string name="browse_status_sections">%d %s sections</string>
+    <string name="browse_status_home_sections">%d home page sections</string>
     <string name="browse_status_loading">loading…</string>
     <string name="browse_status_failed">failed · retried when you apply</string>
     <string name="browse_status_no_section">no %s section</string>

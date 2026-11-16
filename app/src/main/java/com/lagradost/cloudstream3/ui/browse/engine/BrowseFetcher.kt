@@ -8,7 +8,13 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
 
-data class PageRequest(val plan: SourcePlan.Fetch, val sectionIndex: Int, val page: Int) {
+data class PageRequest(
+    val plan: SourcePlan.Fetch,
+    val sectionIndex: Int,
+    val page: Int,
+    /** Page of an excluded-genre section: its titles are hidden, not shown. */
+    val exclusion: Boolean = false,
+) {
     val sourceName: String get() = plan.source.name
     val genres: Set<String> get() = plan.sections[sectionIndex].orEmpty()
 }
