@@ -349,3 +349,42 @@ by build + unit tests only; you test on device.
 6. No "verify genres by opening titles" mode.
 7. One PR with multiple commits (opened only when asked).
 8. Added: search field on the Browse page, filtering loaded results locally (see §6.2).
+
+## 11. Follow-ups after the first device test
+
+Changes in `claude/browse-followups`, from testing on a phone:
+
+1. **Pills never overflow.** The three pills share the row equally (capped at 560dp on wide
+   screens) and their labels are short: "Any genre", "Thriller", "Thriller +3", "Not Horror".
+   The genre pill's own picker is gone: genres are picked only in the Filters sheet (which has
+   groups and include/exclude); the pill opens the sheet. The type and sort pills keep their
+   quick pickers.
+2. **Any genre is the default.** No genre selected browses every home-page section of the
+   selected sources (minus excluded ones). To keep that as cheap as a genre: each step loads at
+   most **3 sections per source** (sections not started yet before deeper pages), still under the
+   global limit of 4 requests and the 3-step auto-fill budget. Search's "Browse by genre" arrow
+   and Reset open/return to Any; genre tags and the Search genre chips still preselect a genre.
+   The "one genre must stay selected" rule is gone.
+3. **Posters.** `SearchResponse` has a single `posterUrl` (no portrait/landscape field);
+   `LoadResponse` adds `backgroundPosterUrl`, but only after a per-title `load`. Home switches to
+   landscape cards when a provider marks a section `horizontalImages`; Search always centre-crops
+   and shows nothing while loading. Browse now (a) shows title initials while loading, on error
+   and without a url, and (b) when the loaded image is wider than 0.85:1, shows it whole
+   (fit-centre) over a blurred, darkened fill made by scaling the same bitmap to 6×9 px — no
+   extra requests, no RenderEffect, decided once per bind. Search's grid is unchanged (opt-in
+   `loadPoster` hook on `SearchAdapter`).
+4. **Exclude (tri-state chips: include → exclude → off).**
+   * Types: exact, because every title has its own type. Providers whose every type is excluded
+     are skipped.
+   * Genres: matching is per *section*, not per title, so exclusion is section-level plus a
+     best-effort title list: sections of an excluded genre are not browsed, and their **first
+     page** is loaded once (one extra request per excluded section, same limits) to hide those
+     titles wherever else they appear (same url on that source, or same title + year on any
+     source). A title that is only on page 2+ of an excluded section, or that a source doesn't
+     list under that genre at all, is not hidden.
+5. **Genre list cleanup.** Section names like "On Air", "Web Series", "Personal", "Dual Audio",
+   "1080p", "ORG Prints" never become genres. Streaming platforms (Netflix, Prime Video — which
+   merges "Amazon" and "Amazon Prime" —, Disney+, Hotstar, HBO, Hulu, …) and regions/industries
+   (Bollywood, Hollywood, Indian, South Indian, Tamil, Telugu, Korean, …) are known keys shown in
+   their own **Platform** and **Region** groups in the sheet; Search's genre row lists genres only.
+   Everything stays part of the cached `GenreIndex`.
