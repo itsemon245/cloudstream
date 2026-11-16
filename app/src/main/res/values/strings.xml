@@ -909,4 +909,9 @@
     <string name="browse_status_failed">failed · retried when you apply</string>
     <string name="browse_status_no_section">no %s section</string>
     <string name="browse_status_no_home">no home page</string>
+    <string name="poster_fit_mode_key" translatable="false">poster_fit_mode_key</string>
+    <string name="poster_fit_mode_settings">Landscape images in posters</string>
+    <string name="poster_fit_mode_settings_des">How wide covers are shown in portrait poster slots</string>
+    <string name="poster_fit_mode_fit">Fit whole image</string>
+    <string name="poster_fit_mode_fill">Fill poster</string>
 </resources>

@@ -425,4 +425,13 @@
         <item>VISCII</item>
         <item>Windows-1258</item>
     </string-array>
+    <string-array name="poster_fit_mode_names">
+        <item>@string/poster_fit_mode_fit</item>
+        <item>@string/poster_fit_mode_fill</item>
+    </string-array>
+    <!-- Must match the PosterFitMode enum names (AppSettings stores the enum name). -->
+    <string-array name="poster_fit_mode_values" translatable="false">
+        <item>FitWhole</item>
+        <item>FillPoster</item>
+    </string-array>
 </resources>

@@ -14,7 +14,7 @@ import com.lagradost.cloudstream3.ui.browse.engine.GenreIndex
 import com.lagradost.cloudstream3.ui.browse.engine.GenreMatcher
 import com.lagradost.cloudstream3.ui.browse.engine.GenreMatcher.Category
 import com.lagradost.cloudstream3.ui.browse.engine.PillLabels
-import com.lagradost.cloudstream3.ui.browse.engine.PosterFit
+import com.lagradost.cloudstream3.ui.poster.PosterFit
 import com.lagradost.cloudstream3.ui.browse.engine.SkipReason
 import com.lagradost.cloudstream3.ui.browse.engine.SourcePlan
 import kotlinx.coroutines.test.runTest

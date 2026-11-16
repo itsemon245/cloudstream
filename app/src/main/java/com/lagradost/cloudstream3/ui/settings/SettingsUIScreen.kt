@@ -1,5 +1,6 @@
 package com.lagradost.cloudstream3.ui.settings
 
+import com.lagradost.cloudstream4.PosterFitMode
 import android.os.Build
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -252,6 +253,19 @@ object SettingsUIScreen : SearchableSettings {
                         title = stringResource(R.string.bottom_title_settings),
                         subtitle = stringResource(R.string.bottom_title_settings_des),
                         icon = painterResource(R.drawable.title_24px)
+                    ),
+                    Preference.PreferenceItem.ListPreference(
+                        preference = settings.ui.posterFitMode,
+                        title = stringResource(R.string.poster_fit_mode_settings),
+                        subtitle = stringResource(R.string.poster_fit_mode_settings_des),
+                        subtitleProvider = { value, entries ->
+                            "${entries[value]} · ${stringResource(R.string.poster_fit_mode_settings_des)}"
+                        },
+                        icon = painterResource(R.drawable.baseline_grid_view_24),
+                        entries = mapOf(
+                            PosterFitMode.FitWhole to stringResource(R.string.poster_fit_mode_fit),
+                            PosterFitMode.FillPoster to stringResource(R.string.poster_fit_mode_fill),
+                        ),
                     ),
                     Preference.PreferenceItem.SliderPreference(
                         preference = settings.ui.posterSize,

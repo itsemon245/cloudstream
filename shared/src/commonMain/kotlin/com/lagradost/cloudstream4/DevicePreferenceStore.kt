@@ -6,6 +6,7 @@ import com.lagradost.cloudstream3.DubStatus
 import com.lagradost.cloudstream3.SearchQuality
 import com.lagradost.cloudstream3.TvType
 import com.mihon.common.preference.PreferenceStore
+import com.mihon.common.preference.getEnum
 import com.mihon.common.preference.getEnumSet
 
 @Composable
@@ -133,6 +134,22 @@ class UIPreferences(preferences: PreferenceStore) {
     val filterQuality = preferences.getEnumSet<SearchQuality>(
         "pref_filter_search_quality_key2", emptySet()
     )
+
+    /** How a landscape image is shown in a portrait poster slot. */
+    val posterFitMode = preferences.getEnum(
+        POSTER_FIT_MODE_KEY, PosterFitMode.FitWhole
+    )
+}
+
+const val POSTER_FIT_MODE_KEY = "poster_fit_mode_key"
+
+/** How a landscape cover/backdrop is shown in a portrait (2:3) poster slot. */
+enum class PosterFitMode {
+    /** Show the whole image, centred over a blurred fill of itself (default). */
+    FitWhole,
+
+    /** Crop the image to fill the poster (centre-crop). */
+    FillPoster,
 }
 
 class ProviderPreferences(preferences: PreferenceStore) {
