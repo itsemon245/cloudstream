@@ -3,6 +3,7 @@ package com.lagradost.cloudstream3.ui.browse
 import android.app.Activity
 import android.os.Bundle
 import android.view.View
+import android.view.ViewGroup
 import androidx.core.view.isVisible
 import androidx.fragment.app.viewModels
 import androidx.recyclerview.widget.GridLayoutManager
@@ -15,6 +16,7 @@ import com.lagradost.cloudstream3.ui.BaseFragment
 import com.lagradost.cloudstream3.ui.setRecycledViewPool
 import com.lagradost.cloudstream3.ui.browse.BrowseFilterSheet.Companion.label
 import com.lagradost.cloudstream3.ui.browse.engine.BrowsePaging
+import com.lagradost.cloudstream3.ui.browse.engine.PillLabels
 import com.lagradost.cloudstream3.ui.browse.engine.BrowseSource
 import com.lagradost.cloudstream3.ui.browse.engine.GenreIndex
 import com.lagradost.cloudstream3.ui.browse.engine.BrowseSort
@@ -32,6 +34,7 @@ import com.lagradost.cloudstream3.utils.UIHelper.fixSystemBarsPadding
 import com.lagradost.cloudstream3.utils.UIHelper.getSpanCount
 import com.lagradost.cloudstream3.utils.UIHelper.hideKeyboard
 import com.lagradost.cloudstream3.utils.UIHelper.navigate
+import com.lagradost.cloudstream3.utils.UIHelper.toPx
 
 /**
  * Browse titles by genre across installed sources.
@@ -65,6 +68,14 @@ class BrowseFragment : BaseFragment<FragmentBrowseBinding>(
             padLeft = isLayout(TV or EMULATOR)
         )
         binding?.browseResults?.spanCount = view.context.getSpanCount()
+        // Equal-width pills: on wide screens keep the row phone-sized instead of stretching.
+        binding?.browsePills?.let { row ->
+            val maxWidth = 560.toPx
+            row.layoutParams = row.layoutParams.apply {
+                width = if (view.resources.displayMetrics.widthPixels > maxWidth) maxWidth
+                else ViewGroup.LayoutParams.MATCH_PARENT
+            }
+        }
     }
 
     private fun initViewModel() {
@@ -103,7 +114,7 @@ class BrowseFragment : BaseFragment<FragmentBrowseBinding>(
 
     override fun onBindingCreated(binding: FragmentBrowseBinding) {
         initViewModel()
-        val adapter = SearchAdapter(binding.browseResults) { callback ->
+        val adapter = SearchAdapter(binding.browseResults, loadPoster = BrowsePosters::load) { callback ->
             SearchHelper.handleSearchClickCallback(callback)
         }
         binding.apply {
@@ -128,7 +139,9 @@ class BrowseFragment : BaseFragment<FragmentBrowseBinding>(
             }
             // Pills are checkable only to show the accent when set; a tap must not toggle them.
             fun restorePills() = viewModel.state.value?.let { render(it, adapter) }
-            browseGenrePill.setOnClickListener { restorePills(); pickGenre() }
+            // Genres are picked in the Filters sheet (with include/exclude and groups); the pill
+            // only shows the current choice compactly and opens it.
+            browseGenrePill.setOnClickListener { restorePills(); openFilterSheet() }
             browseTypePill.setOnClickListener { restorePills(); pickType() }
             browseSortPill.setOnClickListener { restorePills(); pickSort() }
 
@@ -152,16 +165,19 @@ class BrowseFragment : BaseFragment<FragmentBrowseBinding>(
         val binding = binding ?: return
         val ctx = binding.root.context
         binding.apply {
-            browseGenrePill.text = state.genreLabel.ifEmpty { ctx.getString(R.string.browse_genre) }
-            browseGenrePill.isChecked = state.genres.isNotEmpty()
+            browseGenrePill.text = pillLabel(
+                included = state.genres.map { GenreMatcher.displayName(it) },
+                excluded = state.excludedGenres.map { GenreMatcher.displayName(it) },
+                all = ctx.getString(R.string.browse_any_genre),
+            )
+            browseGenrePill.isChecked = state.genres.isNotEmpty() || state.excludedGenres.isNotEmpty()
 
-            val typeGroups = BrowseTypeGroup.selected(state.filters.types)
-            browseTypePill.text = when {
-                state.filters.types.isEmpty() -> ctx.getString(R.string.browse_all_types)
-                typeGroups.size == 1 -> ctx.getString(typeGroups.first().label)
-                else -> typeGroups.joinToString(", ") { ctx.getString(it.label) }
-            }
-            browseTypePill.isChecked = state.filters.types.isNotEmpty()
+            browseTypePill.text = pillLabel(
+                included = BrowseTypeGroup.selected(state.filters.types).map { ctx.getString(it.label) },
+                excluded = BrowseTypeGroup.selected(state.filters.excludedTypes).map { ctx.getString(it.label) },
+                all = ctx.getString(R.string.browse_all_types),
+            )
+            browseTypePill.isChecked = state.filters.types.isNotEmpty() || state.filters.excludedTypes.isNotEmpty()
 
             browseSortPill.text = ctx.getString(state.filters.sort.label())
             browseSortPill.isChecked = state.filters.sort != BrowseSort.Relevance
@@ -181,10 +197,13 @@ class BrowseFragment : BaseFragment<FragmentBrowseBinding>(
                 val query = state.filters.query
                 browseEmptyText.text = when {
                     state.availableGenres.isEmpty() && state.genres.isEmpty() -> ctx.getString(R.string.browse_no_genres)
+                    state.noMatchingSource && state.genres.isEmpty() -> ctx.getString(R.string.browse_no_home_sources)
                     state.noMatchingSource -> ctx.getString(R.string.browse_no_source_for_genre, state.genreLabel)
                     else -> ctx.getString(R.string.browse_no_results)
                 }
-                val searchFor = query.ifBlank { if (state.noMatchingSource) state.genreLabel else "" }
+                val searchFor = query.ifBlank {
+                    if (state.noMatchingSource && state.genres.size == 1) state.genreLabel else ""
+                }
                 if (state.canLoadMore && !state.noMatchingSource) {
                     // Strict filters: nothing matched yet, but more pages exist.
                     browseEmptySearch.isVisible = true
@@ -211,15 +230,19 @@ class BrowseFragment : BaseFragment<FragmentBrowseBinding>(
         savePrefs(state)
     }
 
-    private fun pickGenre() {
-        val state = viewModel.state.value ?: return
-        val options = state.availableGenres
-        if (options.isEmpty()) return
-        val current = options.indexOfFirst { it.key in state.genres }
-        activity?.showBottomDialog(
-            options.map { "${it.name} · ${it.sources}" }, current,
-            getString(R.string.browse_genre), false, {}
-        ) { index -> viewModel.onEvent(BrowseEvent.SetGenres(setOf(options[index].key))) }
+    /**
+     * Short pill text that never grows with the selection: "Any genre", "Thriller",
+     * "Thriller +3", "Not Horror", "Not Horror +1".
+     */
+    private fun pillLabel(included: List<String>, excluded: List<String>, all: String): String {
+        PillLabels.compact(included)?.let { (first, more) ->
+            return if (more == 0) first else getString(R.string.browse_pill_more, first, more)
+        }
+        PillLabels.compact(excluded)?.let { (first, more) ->
+            val not = getString(R.string.browse_pill_not, first)
+            return if (more == 0) not else getString(R.string.browse_pill_more, not, more)
+        }
+        return all
     }
 
     private fun pickType() {
@@ -245,8 +268,8 @@ class BrowseFragment : BaseFragment<FragmentBrowseBinding>(
 
     private fun openFilterSheet() {
         val activity = activity ?: return
-        BrowseFilterSheet(activity, viewModel) { genres, filters, sources ->
-            viewModel.onEvent(BrowseEvent.Apply(genres, filters, sources))
+        BrowseFilterSheet(activity, viewModel) { genres, excludedGenres, filters, sources ->
+            viewModel.onEvent(BrowseEvent.Apply(genres, filters, sources, excludedGenres))
         }.show()
     }
 }

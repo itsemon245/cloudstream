@@ -50,8 +50,35 @@
                 style="@style/BrowseSheetLabel"
                 android:text="@string/browse_genre" />
 
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:paddingHorizontal="20dp"
+                android:paddingBottom="6dp"
+                android:text="@string/browse_tristate_hint"
+                android:textColor="?attr/grayTextColor"
+                android:textSize="12sp" />
+
             <com.google.android.material.chip.ChipGroup
                 android:id="@+id/filter_genres"
+                style="@style/BrowseSheetChips" />
+
+            <TextView
+                android:id="@+id/filter_regions_label"
+                style="@style/BrowseSheetLabel"
+                android:text="@string/browse_regions" />
+
+            <com.google.android.material.chip.ChipGroup
+                android:id="@+id/filter_regions"
+                style="@style/BrowseSheetChips" />
+
+            <TextView
+                android:id="@+id/filter_platforms_label"
+                style="@style/BrowseSheetLabel"
+                android:text="@string/browse_platforms" />
+
+            <com.google.android.material.chip.ChipGroup
+                android:id="@+id/filter_platforms"
                 style="@style/BrowseSheetChips" />
 
             <TextView

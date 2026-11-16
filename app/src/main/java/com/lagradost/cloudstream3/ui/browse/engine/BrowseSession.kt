@@ -9,7 +9,17 @@ class BrowseSession(
     val key: FetchKey,
     index: GenreIndex = GenreIndex.EMPTY,
     maxItems: Int = 3000,
+    /**
+     * At most this many requests per provider per step. Browsing any genre plans a provider's
+     * whole home page; this keeps the first step (and every scroll) small and spreads the
+     * sections over several steps, newest-first-page sections before deeper pages.
+     */
+    private val maxSectionsPerStep: Int = MAX_SECTIONS_PER_STEP,
 ) {
+    companion object {
+        const val MAX_SECTIONS_PER_STEP = 3
+    }
+
     val plans: List<SourcePlan> = BrowsePlanner.plan(sources, key, index)
     val aggregator = BrowseAggregator(maxItems)
 
@@ -21,6 +31,9 @@ class BrowseSession(
     )
 
     private val sections = LinkedHashMap<Pair<String, Int>, SectionState>()
+
+    /** Excluded-genre sections; page 1 is requested once, in the first step. */
+    private val exclusionSections = LinkedHashMap<Pair<String, Int>, SectionState>()
     private val failures = HashMap<String, String?>()
     private val titleCounts = HashMap<String, Int>()
 
@@ -33,12 +46,14 @@ class BrowseSession(
     init {
         for (plan in plans) if (plan is SourcePlan.Fetch) {
             for (index in plan.sections.keys) sections[plan.source.name to index] = SectionState()
+            for (index in plan.excludeSections) exclusionSections[plan.source.name to index] = SectionState()
         }
     }
 
     val fetchPlans: List<SourcePlan.Fetch> get() = plans.filterIsInstance<SourcePlan.Fetch>()
 
-    val isLoading: Boolean get() = sections.values.any { it.inFlight }
+    val isLoading: Boolean
+        get() = sections.values.any { it.inFlight } || exclusionSections.values.any { it.inFlight }
 
     val canLoadMore: Boolean
         get() = !aggregator.isFull && sections.values.any { it.hasNext && !it.inFlight }
@@ -46,21 +61,38 @@ class BrowseSession(
     /** Page 1 of every planned section. */
     fun firstRequests(): List<PageRequest> = nextRequests()
 
-    /** The next page of every section that has one and is idle. Marks them in flight. */
+    /**
+     * The next requests: excluded sections' first page (once), then per provider up to
+     * [maxSectionsPerStep] idle sections that have a next page — sections not started yet first.
+     * Marks them in flight.
+     */
     fun nextRequests(): List<PageRequest> {
         if (aggregator.isFull) return emptyList()
         val requests = ArrayList<PageRequest>()
-        // Interleave providers: first section of each provider, then the second, ...
-        val perPlan = fetchPlans.map { plan ->
-            plan.sections.keys.mapNotNull { index ->
-                val state = sections[plan.source.name to index] ?: return@mapNotNull null
-                if (!state.hasNext || state.inFlight) null
-                else PageRequest(plan, index, state.loadedPages + 1)
+        // Exclusions first, so their titles are known before most of the pool arrives.
+        for (plan in fetchPlans) for (index in plan.excludeSections) {
+            val state = exclusionSections[plan.source.name to index] ?: continue
+            if (state.loadedPages == 0 && !state.inFlight && !state.failed) {
+                state.inFlight = true
+                requests += PageRequest(plan, index, 1, exclusion = true)
             }
+        }
+        // Interleave providers: first request of each provider, then the second, ...
+        val perPlan = fetchPlans.map { plan ->
+            plan.sections.keys
+                .mapNotNull { index ->
+                    val state = sections[plan.source.name to index] ?: return@mapNotNull null
+                    if (!state.hasNext || state.inFlight) null
+                    else PageRequest(plan, index, state.loadedPages + 1)
+                }
+                .sortedBy { if (it.page == 1) 0 else 1 } // stable: keeps section order
+                .take(maxSectionsPerStep)
         }
         val longest = perPlan.maxOfOrNull { it.size } ?: 0
         for (i in 0 until longest) for (list in perPlan) list.getOrNull(i)?.let { requests += it }
-        for (request in requests) sections[request.sourceName to request.sectionIndex]?.inFlight = true
+        for (request in requests) if (!request.exclusion) {
+            sections[request.sourceName to request.sectionIndex]?.inFlight = true
+        }
         stepTotal = requests.size
         stepDone = 0
         return requests
@@ -69,6 +101,20 @@ class BrowseSession(
     /** @return number of new titles. */
     fun onEvent(event: FetchEvent): Int {
         val request = event.request
+        if (request.exclusion) {
+            val state = exclusionSections[request.sourceName to request.sectionIndex] ?: return 0
+            state.inFlight = false
+            stepDone++
+            when (event) {
+                is FetchEvent.PageLoaded -> {
+                    state.loadedPages = 1
+                    aggregator.block(request.sourceName, request.plan.source.supportedTypes, event.page.items)
+                }
+                // Best-effort: a failed exclusion page just hides nothing.
+                is FetchEvent.PageFailed -> state.failed = true
+            }
+            return 0
+        }
         val state = sections[request.sourceName to request.sectionIndex] ?: return 0
         state.inFlight = false
         stepDone++
@@ -101,6 +147,7 @@ class BrowseSession(
     /** Cancelled requests go back to idle so they are requested again next time. */
     fun resetInFlight() {
         for (state in sections.values) state.inFlight = false
+        for (state in exclusionSections.values) state.inFlight = false
     }
 
     /** Providers with at least one section whose last request failed. */

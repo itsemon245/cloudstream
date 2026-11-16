@@ -11,6 +11,9 @@ import java.text.Normalizer
  * "Live Action" are excluded explicitly.
  */
 object GenreMatcher {
+    /** How a key is grouped in the UI. Selection works the same for every category. */
+    enum class Category { Genre, Region, Platform }
+
     data class Genre(
         /** Stable id, used in queries, caches and preferences. */
         val key: String,
@@ -20,6 +23,7 @@ object GenreMatcher {
         val aliases: List<String>,
         /** Normalised word sequences that contain an alias but do not mean this genre. */
         val excludes: List<String> = emptyList(),
+        val category: Category = Category.Genre,
     ) {
         internal val aliasTokens: List<List<String>> by lazy { aliases.map { tokens(it) } }
         internal val excludeTokens: List<List<String>> by lazy { excludes.map { tokens(it) } }
@@ -47,8 +51,45 @@ object GenreMatcher {
         Genre("sport", "Sport", listOf("sport", "sports")),
         Genre("reality", "Reality", listOf("reality", "reality tv")),
         Genre("biography", "Biography", listOf("biography", "biopic", "biographical")),
-        Genre("korean", "Korean", listOf("korean", "kdrama", "k drama")),
-        Genre("bollywood", "Bollywood", listOf("bollywood", "hindi")),
+        // Regions / film industries: shown in their own group.
+        Genre("korean", "Korean", listOf("korean", "kdrama", "k drama"), category = Category.Region),
+        Genre("bollywood", "Bollywood", listOf("bollywood", "hindi"), category = Category.Region),
+        Genre("hollywood", "Hollywood", listOf("hollywood"), category = Category.Region),
+        Genre("indian", "Indian", listOf("indian", "desi"), listOf("south indian"), category = Category.Region),
+        Genre("south indian", "South Indian", listOf("south indian", "tollywood", "kollywood"), category = Category.Region),
+        Genre("tamil", "Tamil", listOf("tamil"), category = Category.Region),
+        Genre("telugu", "Telugu", listOf("telugu"), category = Category.Region),
+        Genre("malayalam", "Malayalam", listOf("malayalam"), category = Category.Region),
+        Genre("kannada", "Kannada", listOf("kannada"), category = Category.Region),
+        Genre("bengali", "Bengali", listOf("bengali", "bangla"), category = Category.Region),
+        Genre("punjabi", "Punjabi", listOf("punjabi"), category = Category.Region),
+        Genre("pakistani", "Pakistani", listOf("pakistani"), category = Category.Region),
+        Genre("chinese", "Chinese", listOf("chinese", "cdrama", "c drama"), category = Category.Region),
+        Genre("japanese", "Japanese", listOf("japanese", "jdrama", "j drama"), category = Category.Region),
+        Genre("thai", "Thai", listOf("thai"), category = Category.Region),
+        Genre("turkish", "Turkish", listOf("turkish"), category = Category.Region),
+        // Streaming platforms: aliases merge "Amazon", "Amazon Prime" and "Prime Video".
+        Genre("netflix", "Netflix", listOf("netflix"), category = Category.Platform),
+        Genre("prime video", "Prime Video", listOf("amazon", "prime video", "amazon prime"), category = Category.Platform),
+        Genre("disney plus", "Disney+", listOf("disney", "disney plus"), category = Category.Platform),
+        Genre("hotstar", "Hotstar", listOf("hotstar"), category = Category.Platform),
+        Genre("apple tv", "Apple TV+", listOf("apple", "apple tv"), category = Category.Platform),
+        Genre("hbo", "HBO", listOf("hbo", "hbo max"), category = Category.Platform),
+        Genre("hulu", "Hulu", listOf("hulu"), category = Category.Platform),
+        Genre("paramount", "Paramount+", listOf("paramount", "paramount plus"), category = Category.Platform),
+        Genre("peacock", "Peacock", listOf("peacock"), category = Category.Platform),
+        Genre("mx player", "MX Player", listOf("mx original", "mx originals", "mx player"), category = Category.Platform),
+        Genre("zee5", "ZEE5", listOf("zee5", "zee 5"), category = Category.Platform),
+        Genre("sonyliv", "SonyLIV", listOf("sonyliv", "sony liv"), category = Category.Platform),
+        Genre("jiocinema", "JioCinema", listOf("jiocinema", "jio cinema"), category = Category.Platform),
+        Genre("crunchyroll", "Crunchyroll", listOf("crunchyroll"), category = Category.Platform),
+        Genre("aha", "aha", listOf("aha video", "aha originals"), category = Category.Platform),
+        Genre("hoichoi", "hoichoi", listOf("hoichoi"), category = Category.Platform),
+        Genre("altbalaji", "ALTBalaji", listOf("altbalaji", "alt balaji"), category = Category.Platform),
+        Genre("voot", "Voot", listOf("voot"), category = Category.Platform),
+        Genre("starz", "Starz", listOf("starz"), category = Category.Platform),
+        Genre("showtime", "Showtime", listOf("showtime"), category = Category.Platform),
+        Genre("amc", "AMC+", listOf("amc", "amc plus"), category = Category.Platform),
     )
 
     private val byKey = CANONICAL.associateBy { it.key }
@@ -63,7 +104,20 @@ object GenreMatcher {
         "cartoon", "dubbed", "subbed", "dub", "sub", "hd", "4k", "full", "free", "watch", "online",
         "the", "of", "and", "in", "on", "for", "to", "a", "an", "de", "la", "el", "los", "las",
         "rated", "viewed", "most", "random", "home", "list", "collection", "collections",
+        // Not genres: formats, languages, site jargon.
+        "air", "aired", "web", "personal", "dual", "audio", "multi", "original", "originals",
+        "exclusive", "exclusives", "special", "specials", "premium", "vip", "ott", "imdb",
+        "english", "uhd", "hdr", "bluray", "webdl", "hevc", "x264", "x265", "esub",
+        "esubs", "subs", "subtitles", "org", "dvd", "cam", "hq", "region", "country", "genre",
+        "genres", "category", "categories", "others", "other", "misc", "ova", "ona",
+        "print", "prints", "rip", "hdrip", "hdcam", "predvd", "camrip", "hdtc", "hdts",
     )
+
+    private val RESOLUTION = Regex("\\d+p")
+
+    /** Tokens like "1080p" or "2024" are never genre words. */
+    private fun isJunkToken(token: String): Boolean =
+        token.length <= 1 || token.none { it.isLetter() } || RESOLUTION.matches(token)
 
     /** Lowercase, strip accents, keep letters/digits only, single spaces. */
     fun normalize(text: String): String {
@@ -103,6 +157,9 @@ object GenreMatcher {
     }
 
     fun isCanonical(key: String): Boolean = key in byKey
+
+    /** UI group of a key; discovered and ad-hoc keys are genres. */
+    fun categoryOf(key: String): Category = byKey[key]?.category ?: Category.Genre
 
     /** The genre for [key], or an ad-hoc genre whose only alias is the key itself. */
     fun genreFor(key: String): Genre = byKey[key] ?: Genre(key, key, listOf(key))
@@ -167,7 +224,7 @@ object GenreMatcher {
      */
     fun discoveredKeyOf(sectionTokens: List<String>): String? {
         if (canonicalGenresOfTokens(sectionTokens).isNotEmpty()) return null
-        val words = sectionTokens.filter { it !in STOP_WORDS && it.any { c -> c.isLetter() } && it.length > 1 }
+        val words = sectionTokens.filter { it !in STOP_WORDS && !isJunkToken(it) }
         if (words.isEmpty() || words.size > 3) return null
         return words.joinToString(" ")
     }

@@ -4,6 +4,7 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.FrameLayout
+import android.widget.ImageView
 import com.lagradost.cloudstream3.SearchResponse
 import com.lagradost.cloudstream3.databinding.SearchResultGridBinding
 import com.lagradost.cloudstream3.databinding.SearchResultGridExpandedBinding
@@ -33,6 +34,8 @@ class SearchClickCallback(
 class SearchAdapter(
     private val resView: AutofitRecyclerView,
     private val isHorizontal:Boolean = false,
+    /** Optional replacement for the default poster loading; see SearchResultBuilder.bind. */
+    private val loadPoster: ((ImageView, SearchResponse) -> Unit)? = null,
     private val clickCallback: (SearchClickCallback) -> Unit,
 ) : NoStateAdapter<SearchResponse>(diffCallback = BaseDiffCallback(itemSame = { a, b ->
     if (a.id != null || b.id != null) {
@@ -94,6 +97,6 @@ class SearchAdapter(
                 imageView.layoutParams = params
             }
         }
-        SearchResultBuilder.bind(clickCallback, item, position, holder.view.root)
+        SearchResultBuilder.bind(clickCallback, item, position, holder.view.root, loadPoster = loadPoster)
     }
 }

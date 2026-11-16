@@ -18,6 +18,8 @@ class BrowseAggregator(private val maxItems: Int = 3000) {
     private val byUrl = HashMap<Pair<String, String>, BrowseItem>()
     private val byTitle = HashMap<String, BrowseItem>()
     private val nextPosition = HashMap<String, Int>()
+    private val blockedUrls = HashSet<Pair<String, String>>()
+    private val blockedTitles = HashSet<String>()
 
     val size: Int get() = items.size
     val isFull: Boolean get() = items.size >= maxItems
@@ -26,6 +28,28 @@ class BrowseAggregator(private val maxItems: Int = 3000) {
 
     fun clear() {
         items.clear(); byUrl.clear(); byTitle.clear(); nextPosition.clear()
+        blockedUrls.clear(); blockedTitles.clear()
+    }
+
+    private fun titleKeyOf(response: SearchResponse, type: TvType?): String =
+        GenreMatcher.normalize(response.name) + "|" +
+                (response.yearOrNull()?.toString() ?: "?" + (type?.name ?: ""))
+
+    /**
+     * Hides titles listed in a section of an excluded genre: already loaded ones are marked
+     * [BrowseItem.excluded], later ones are not added. Matches the same url on that provider and
+     * the same title + year on any provider.
+     */
+    fun block(sourceName: String, supportedTypes: Set<TvType>, responses: List<SearchResponse>) {
+        val fallbackType = supportedTypes.singleOrNull()
+        for (response in responses) {
+            val urlKey = sourceName to response.url
+            val titleKey = titleKeyOf(response, response.type ?: fallbackType)
+            blockedUrls += urlKey
+            blockedTitles += titleKey
+            byUrl[urlKey]?.excluded = true
+            byTitle[titleKey]?.excluded = true
+        }
     }
 
     /** @return number of new titles added. */
@@ -40,14 +64,14 @@ class BrowseAggregator(private val maxItems: Int = 3000) {
         val fallbackType = supportedTypes.singleOrNull()
         for (response in responses) {
             val urlKey = sourceName to response.url
+            if (urlKey in blockedUrls) continue
             byUrl[urlKey]?.let { existing ->
                 if (!existing.genres.containsAll(sectionGenres)) existing.genres = existing.genres + sectionGenres
                 continue
             }
             val type = response.type ?: fallbackType
-            val year = response.yearOrNull()
-            val titleKey = GenreMatcher.normalize(response.name) + "|" +
-                    (year?.toString() ?: "?" + (type?.name ?: ""))
+            val titleKey = titleKeyOf(response, type)
+            if (titleKey in blockedTitles) continue
             val sameTitle = byTitle[titleKey]
             if (sameTitle != null && sameTitle.response.apiName != sourceName) {
                 if (!sameTitle.genres.containsAll(sectionGenres)) sameTitle.genres = sameTitle.genres + sectionGenres

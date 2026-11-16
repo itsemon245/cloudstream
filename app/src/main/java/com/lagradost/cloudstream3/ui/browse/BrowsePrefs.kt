@@ -17,6 +17,7 @@ const val BROWSE_PREFS_KEY = "browse_prefs"
 @Serializable
 data class BrowsePrefs(
     @JsonProperty("types") @SerialName("types") val types: List<String> = emptyList(),
+    @JsonProperty("excludedTypes") @SerialName("excludedTypes") val excludedTypes: List<String> = emptyList(),
     @JsonProperty("sort") @SerialName("sort") val sort: String? = null,
     @JsonProperty("minRating") @SerialName("minRating") val minRating: Double? = null,
     @JsonProperty("yearFrom") @SerialName("yearFrom") val yearFrom: Int? = null,
@@ -29,6 +30,7 @@ data class BrowsePrefs(
 ) {
     fun toFilters() = ClientFilters(
         types = types.mapNotNullTo(HashSet()) { name -> TvType.entries.firstOrNull { it.name == name } },
+        excludedTypes = excludedTypes.mapNotNullTo(HashSet()) { name -> TvType.entries.firstOrNull { it.name == name } },
         sort = BrowseSort.entries.firstOrNull { it.name == sort } ?: BrowseSort.Relevance,
         minRating = minRating,
         yearFrom = yearFrom,
@@ -42,6 +44,7 @@ data class BrowsePrefs(
     companion object {
         fun from(filters: ClientFilters, sources: Set<String>) = BrowsePrefs(
             types = filters.types.map { it.name }.sorted(),
+            excludedTypes = filters.excludedTypes.map { it.name }.sorted(),
             sort = filters.sort.name,
             minRating = filters.minRating,
             yearFrom = filters.yearFrom,

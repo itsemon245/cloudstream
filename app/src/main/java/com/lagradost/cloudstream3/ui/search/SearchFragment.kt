@@ -215,7 +215,10 @@ class SearchFragment : BaseFragment<FragmentSearchBinding>(
         // The genre index is cached per plugin load, but the first build parses every section
         // name, so keep it off the main thread.
         ioSafe {
-            val genres = browseGenresOf(apis).take(10).map { GenreMatcher.displayName(it.first) }
+            // Real genres only; regions and platforms live in the Filters sheet's own groups.
+            val genres = browseGenresOf(apis)
+                .filter { GenreMatcher.categoryOf(it.first) == GenreMatcher.Category.Genre }
+                .take(10).map { GenreMatcher.displayName(it.first) }
             main {
                 val row = binding?.searchBrowse ?: return@main
                 hasBrowseGenres = genres.isNotEmpty()

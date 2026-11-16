@@ -91,46 +91,47 @@
         </FrameLayout>
     </LinearLayout>
 
-    <!-- Genre / Type / Sort pills -->
-    <HorizontalScrollView
+    <!-- Genre / Type / Sort pills: equal shares of the row, so they can never overflow.
+         Labels are kept short ("Thriller +3") and ellipsize as a last resort. -->
+    <LinearLayout
+        android:id="@+id/browse_pills"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:background="?attr/primaryGrayBackground"
-        android:fadingEdge="horizontal"
-        android:requiresFadingEdge="horizontal"
-        android:scrollbars="none">
+        android:orientation="horizontal"
+        android:paddingHorizontal="8dp"
+        android:paddingBottom="6dp">
 
-        <LinearLayout
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:paddingHorizontal="8dp"
-            android:paddingBottom="6dp">
+        <com.google.android.material.chip.Chip
+            android:id="@+id/browse_genre_pill"
+            style="@style/BrowsePill"
+            android:layout_width="0dp"
+            android:layout_weight="1"
+            android:checked="true"
+            android:nextFocusRight="@id/browse_type_pill"
+            android:nextFocusDown="@id/browse_results"
+            tools:text="Thriller +3" />
 
-            <com.google.android.material.chip.Chip
-                android:id="@+id/browse_genre_pill"
-                style="@style/BrowsePill"
-                android:checked="true"
-                android:nextFocusRight="@id/browse_type_pill"
-                android:nextFocusDown="@id/browse_results"
-                tools:text="Action" />
+        <com.google.android.material.chip.Chip
+            android:id="@+id/browse_type_pill"
+            style="@style/BrowsePill"
+            android:layout_width="0dp"
+            android:layout_weight="1"
+            android:nextFocusLeft="@id/browse_genre_pill"
+            android:nextFocusRight="@id/browse_sort_pill"
+            android:nextFocusDown="@id/browse_results"
+            tools:text="@string/browse_all_types" />
 
-            <com.google.android.material.chip.Chip
-                android:id="@+id/browse_type_pill"
-                style="@style/BrowsePill"
-                android:nextFocusLeft="@id/browse_genre_pill"
-                android:nextFocusRight="@id/browse_sort_pill"
-                android:nextFocusDown="@id/browse_results"
-                tools:text="@string/browse_all_types" />
-
-            <com.google.android.material.chip.Chip
-                android:id="@+id/browse_sort_pill"
-                style="@style/BrowsePill"
-                android:nextFocusLeft="@id/browse_type_pill"
-                android:nextFocusDown="@id/browse_results"
-                tools:text="@string/browse_sort_relevance" />
-        </LinearLayout>
-    </HorizontalScrollView>
+        <com.google.android.material.chip.Chip
+            android:id="@+id/browse_sort_pill"
+            style="@style/BrowsePill"
+            android:layout_width="0dp"
+            android:layout_weight="1"
+            android:layout_marginEnd="0dp"
+            android:nextFocusLeft="@id/browse_type_pill"
+            android:nextFocusDown="@id/browse_results"
+            tools:text="@string/browse_sort_top_rated" />
+    </LinearLayout>
 
     <com.google.android.material.progressindicator.LinearProgressIndicator
         android:id="@+id/browse_progress"

@@ -33,8 +33,10 @@ sealed class SourcePlan {
         override val source: BrowseSource,
         /** Order of the provider; used for relevance tie-breaks. */
         val order: Int,
-        /** Section index -> genre keys it matched. */
+        /** Section index -> genre keys it matched (empty set when browsing any genre). */
         val sections: Map<Int, Set<String>>,
+        /** Sections of excluded genres: page 1 is loaded only to hide its titles. */
+        val excludeSections: Set<Int> = emptySet(),
     ) : SourcePlan()
 
     data class Skipped(override val source: BrowseSource, val reason: SkipReason) : SourcePlan()
@@ -58,10 +60,21 @@ object BrowsePlanner {
                     key.types.isNotEmpty() && source.supportedTypes.none { it in key.types } ->
                         SourcePlan.Skipped(source, SkipReason.TypeNotSupported)
 
+                    key.excludedTypes.isNotEmpty() && source.supportedTypes.isNotEmpty() &&
+                            source.supportedTypes.all { it in key.excludedTypes } ->
+                        SourcePlan.Skipped(source, SkipReason.TypeNotSupported)
+
                     else -> {
-                        val sections = index.sectionsFor(source, key.genres)
+                        val excluded = index.sectionsFor(source, key.excludedGenres).keys
+                        val sections = if (key.genres.isEmpty()) {
+                            // Any genre: the provider's whole home page, minus excluded sections.
+                            source.sectionNames.indices.filter { it !in excluded }
+                                .associateWith { emptySet<String>() }
+                        } else {
+                            index.sectionsFor(source, key.genres).filterKeys { it !in excluded }
+                        }
                         if (sections.isEmpty()) SourcePlan.Skipped(source, SkipReason.NoMatchingSection)
-                        else SourcePlan.Fetch(source, order++, sections)
+                        else SourcePlan.Fetch(source, order++, sections, excluded)
                     }
                 }
             }
